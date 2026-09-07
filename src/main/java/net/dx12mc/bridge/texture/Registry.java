@@ -1,0 +1,442 @@
+package net.dx12mc.bridge.texture;
+
+import com.mojang.blaze3d.platform.NativeImage;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import net.dx12mc.bridge.Stats;
+import net.dx12mc.graphics.bgfx.StagingBackpressureException;
+import net.dx12mc.graphics.bgfx.StagingMemory;
+import net.dx12mc.graphics.bgfx.Texture;
+
+public final class Registry implements AutoCloseable {
+  private static final long MAX_TOTAL_CPU_BYTES =
+      Long.getLong("dx12mc.texture.maxTotalBytes", 512L * 1024L * 1024L);
+  private static final int MAX_UPLOAD_CHUNK_BYTES =
+      (int)
+          Math.min(
+              StagingMemory.maxOutstandingBytes(),
+              Math.max(64L << 10, Long.getLong("dx12mc.texture.maxUploadChunkBytes", 4L << 20)));
+  private final Map<Integer, Entry> entries = new HashMap<>();
+  private final Stats stats;
+  private int boundId;
+  private boolean started;
+  private long cpuBytes;
+  private long frameBoundary;
+
+  public Registry(Stats stats) {
+    this.stats = stats;
+  }
+
+  public void start() {
+    started = true;
+  }
+
+  public void bind(int id) {
+    boundId = id;
+  }
+
+  public void allocate(int id, int maxLevel, int width, int height) {
+    if (id <= 0 || width <= 0 || height <= 0) return;
+    Entry existing = entries.get(id);
+    if (existing == null) {
+      entries.put(id, new Entry(new Image(width, height, maxLevel), true));
+      return;
+    }
+    if (existing.image.matchesDimensions(width, height)) {
+      if (existing.image.ensureMaxLevel(maxLevel)) existing.closeGpu();
+      existing.authoritativeDimensions = true;
+      return;
+    }
+    if (!existing.authoritativeDimensions) {
+      if (width < existing.image.width() || height < existing.image.height()) {
+        throw new IllegalStateException(
+            "authoritative texture allocation is smaller than previously mirrored upload extent:"
+                + " textureId="
+                + id
+                + ", inferred="
+                + existing.image.width()
+                + "x"
+                + existing.image.height()
+                + ", authoritative="
+                + width
+                + "x"
+                + height);
+      }
+      growInferred(existing, width, height, id, 0);
+      if (existing.image.ensureMaxLevel(maxLevel)) existing.closeGpu();
+      existing.authoritativeDimensions = true;
+      return;
+    }
+    existing.closeGpu();
+    cpuBytes -= existing.image.allocatedCpuBytes();
+    entries.put(id, new Entry(new Image(width, height, maxLevel), true));
+  }
+
+  public void allocateBoundLevel(int level, int width, int height) {
+    if (boundId <= 0) {
+      throw new IllegalStateException("OpenGL texture allocation has no tracked bound texture id");
+    }
+    if (level < 0 || width <= 0 || height <= 0) {
+      throw new IllegalArgumentException(
+          "invalid raw texture allocation: level=" + level + ", size=" + width + "x" + height);
+    }
+    Entry entry = entries.get(boundId);
+    if (entry == null) {
+      if (level != 0) {
+        throw new IllegalStateException(
+            "raw mip allocation arrived before base level for textureId="
+                + boundId
+                + ", level="
+                + level
+                + ", size="
+                + width
+                + "x"
+                + height);
+      }
+      entries.put(boundId, new Entry(new Image(width, height, 0), true));
+      return;
+    }
+    if (entry.image.ensureMaxLevel(level)) entry.closeGpu();
+    if (entry.image.levelWidth(level) != width || entry.image.levelHeight(level) != height) {
+      if (level == 0) {
+        entry.closeGpu();
+        cpuBytes -= entry.image.allocatedCpuBytes();
+        entries.put(boundId, new Entry(new Image(width, height, 0), true));
+        return;
+      }
+      throw new IllegalStateException(
+          "raw mip allocation dimensions disagree with mirrored base texture: textureId="
+              + boundId
+              + ", level="
+              + level
+              + ", expected="
+              + entry.image.levelWidth(level)
+              + "x"
+              + entry.image.levelHeight(level)
+              + ", actual="
+              + width
+              + "x"
+              + height);
+    }
+  }
+
+  public boolean upload(
+      NativeImage source,
+      int level,
+      int offsetX,
+      int offsetY,
+      int skipPixels,
+      int skipRows,
+      int width,
+      int height,
+      boolean blur,
+      boolean clamp,
+      boolean mipmap) {
+    if (boundId <= 0 || source == null) return false;
+    if (level < 0 || offsetX < 0 || offsetY < 0 || width <= 0 || height <= 0) return false;
+    if (skipPixels < 0
+        || skipRows < 0
+        || (long) skipPixels + width > source.getWidth()
+        || (long) skipRows + height > source.getHeight()) return false;
+    Entry entry = entries.get(boundId);
+    if (entry == null) {
+      if (level != 0) {
+        throw new IllegalStateException(
+            "mip upload arrived before base dimensions were known: textureId="
+                + boundId
+                + ", level="
+                + level
+                + ", dst="
+                + offsetX
+                + ","
+                + offsetY
+                + " "
+                + width
+                + "x"
+                + height);
+      }
+      int inferredWidth = checkedExtent(offsetX, width, "width");
+      int inferredHeight = checkedExtent(offsetY, height, "height");
+      entry = new Entry(new Image(inferredWidth, inferredHeight, 0), false);
+      entries.put(boundId, entry);
+    } else {
+      if (level > entry.image.maxLevel()) {
+        if (entry.authoritativeDimensions) return false;
+        int minimumAxis = minimumBaseAxisForMipLevel(level);
+        if (entry.image.width() >= entry.image.height()) {
+          growInferred(entry, minimumAxis, entry.image.height(), boundId, level);
+        } else {
+          growInferred(entry, entry.image.width(), minimumAxis, boundId, level);
+        }
+      }
+      if (entry.image.ensureMaxLevel(level)) entry.closeGpu();
+    }
+    int requiredLevelWidth = checkedExtent(offsetX, width, "width");
+    int requiredLevelHeight = checkedExtent(offsetY, height, "height");
+    if (requiredLevelWidth > entry.image.levelWidth(level)
+        || requiredLevelHeight > entry.image.levelHeight(level)) {
+      if (entry.authoritativeDimensions) return false;
+      int minimumBaseWidth = minimumBaseDimensionForLevelExtent(requiredLevelWidth, level);
+      int minimumBaseHeight = minimumBaseDimensionForLevelExtent(requiredLevelHeight, level);
+      growInferred(entry, minimumBaseWidth, minimumBaseHeight, boundId, level);
+    }
+    long additional = entry.image.additionalBytesForUpload(level);
+    ensureRegistryBudget(additional, boundId, level);
+    long before = entry.image.allocatedCpuBytes();
+    try {
+      return entry.image.upload(
+          source,
+          level,
+          offsetX,
+          offsetY,
+          skipPixels,
+          skipRows,
+          width,
+          height,
+          blur,
+          clamp,
+          mipmap);
+    } finally {
+      cpuBytes += entry.image.allocatedCpuBytes() - before;
+    }
+  }
+
+  public Texture resolve(int id) {
+    if (!started || id <= 0) return null;
+    Entry entry = entries.get(id);
+    if (entry == null || !entry.image.hasBasePixels()) return null;
+    return entry.resolve(id);
+  }
+
+  public void delete(int id) {
+    Entry entry = entries.remove(id);
+    if (entry != null) {
+      entry.closeGpu();
+      cpuBytes -= entry.image.allocatedCpuBytes();
+    }
+    if (boundId == id) boundId = 0;
+  }
+
+  public int mirroredCount() {
+    return entries.size();
+  }
+
+  public long allocatedCpuBytes() {
+    return Math.max(0, cpuBytes);
+  }
+
+  public void onFrameBoundary() {
+    frameBoundary++;
+  }
+
+  @Override
+  public void close() {
+    for (Entry entry : entries.values()) entry.closeGpu();
+    entries.clear();
+    boundId = 0;
+    started = false;
+    cpuBytes = 0;
+    frameBoundary = 0;
+  }
+
+  private void growInferred(
+      Entry entry, int minimumWidth, int minimumHeight, int textureId, int level) {
+    if (entry.authoritativeDimensions) {
+      throw new IllegalStateException(
+          "attempted to grow authoritative texture dimensions: textureId=" + textureId);
+    }
+    int newWidth = Math.max(entry.image.width(), minimumWidth);
+    int newHeight = Math.max(entry.image.height(), minimumHeight);
+    if (newWidth == entry.image.width() && newHeight == entry.image.height()) return;
+    long before = entry.image.allocatedCpuBytes();
+    long projected = entry.image.projectedAllocatedCpuBytes(newWidth, newHeight);
+    ensureRegistryBudget(projected - before, textureId, level);
+    entry.closeGpu();
+    entry.image.growToFit(newWidth, newHeight);
+    cpuBytes += entry.image.allocatedCpuBytes() - before;
+  }
+
+  private void ensureRegistryBudget(long additional, int textureId, int level) {
+    if (additional <= 0) return;
+    long projected;
+    try {
+      projected = Math.addExact(cpuBytes, additional);
+    } catch (ArithmeticException overflow) {
+      throw new IllegalStateException("DX12MC texture CPU mirror byte counter overflow", overflow);
+    }
+    if (projected > MAX_TOTAL_CPU_BYTES) {
+      throw new IllegalStateException(
+          "DX12MC texture CPU mirror budget exceeded: current="
+              + cpuBytes
+              + ", additional="
+              + additional
+              + ", limit="
+              + MAX_TOTAL_CPU_BYTES
+              + ", textureId="
+              + textureId
+              + ", level="
+              + level
+              + ". Override with -Ddx12mc.texture.maxTotalBytes=... if intentional.");
+    }
+  }
+
+  private static int checkedExtent(int offset, int size, String axis) {
+    long extent = (long) offset + size;
+    if (offset < 0 || size <= 0 || extent <= 0 || extent > Integer.MAX_VALUE) {
+      throw new IllegalArgumentException(
+          "invalid texture " + axis + " extent: offset=" + offset + ", size=" + size);
+    }
+    return (int) extent;
+  }
+
+  private static int minimumBaseAxisForMipLevel(int level) {
+    if (level < 0 || level > 30) throw new IllegalArgumentException("invalid mip level: " + level);
+    long size = 1L << level;
+    if (size > Integer.MAX_VALUE)
+      throw new IllegalArgumentException("mip level is too large: " + level);
+    return (int) size;
+  }
+
+  static int minimumBaseDimensionForLevelExtent(int levelExtent, int level) {
+    if (levelExtent <= 0 || level < 0) throw new IllegalArgumentException("invalid mip extent");
+    if (level == 0 || levelExtent == 1) return levelExtent;
+    long base = (long) levelExtent << Math.min(level, 30);
+    if (base <= 0 || base > Integer.MAX_VALUE) {
+      throw new IllegalArgumentException(
+          "cannot infer base dimension from level=" + level + ", extent=" + levelExtent);
+    }
+    return (int) base;
+  }
+
+  private final class Entry {
+    private final Image image;
+    private boolean authoritativeDimensions;
+    private Texture gpu;
+    private boolean gpuReady;
+    private long gpuRevision = -1;
+    private UploadQueue initialUploads;
+    private UploadQueue dirtyUploads;
+    private long pressureBoundary = -1;
+    private StagingBackpressureException deferredPressure;
+
+    private Entry(Image image, boolean authoritativeDimensions) {
+      this.image = image;
+      this.authoritativeDimensions = authoritativeDimensions;
+    }
+
+    private Texture resolve(int textureId) {
+      if (pressureBoundary == frameBoundary && deferredPressure != null) {
+        if (usableGpu()) return gpu;
+        throw deferredPressure;
+      }
+      try {
+        if (gpu == null || !gpu.valid()) {
+          gpu =
+              Texture.create(
+                  image.width(),
+                  image.height(),
+                  image.maxLevel(),
+                  image.blur(),
+                  image.clamp(),
+                  image.mipmap());
+          gpuReady = false;
+          initialUploads = new UploadQueue(image.fullUploads(), image.revision());
+          image.clearDirty();
+        }
+        if (!gpuReady) {
+          drain(initialUploads);
+          gpuReady = true;
+          gpuRevision = initialUploads.revision();
+          stats.textureGpuCreated(initialUploads.uploadedBytes());
+          initialUploads = null;
+        }
+        if (gpuRevision != image.revision()) {
+          if (dirtyUploads == null) {
+            long revision = image.revision();
+            List<Image.Upload> snapshot = image.dirtyUploads();
+            image.clearDirty();
+            if (snapshot.isEmpty()) {
+              gpuRevision = revision;
+            } else {
+              dirtyUploads = new UploadQueue(snapshot, revision);
+            }
+          }
+          if (dirtyUploads != null) {
+            drain(dirtyUploads);
+            gpuRevision = dirtyUploads.revision();
+            stats.textureGpuUpdated(dirtyUploads.regionCount(), dirtyUploads.uploadedBytes());
+            dirtyUploads = null;
+          }
+        }
+        pressureBoundary = -1;
+        deferredPressure = null;
+        stats.nativeStaging(StagingMemory.outstandingBytes(), StagingMemory.peakBytes());
+        return gpu;
+      } catch (StagingBackpressureException pressure) {
+        stats.textureGpuDeferred();
+        stats.nativeStaging(StagingMemory.outstandingBytes(), StagingMemory.peakBytes());
+        pressureBoundary = frameBoundary;
+        deferredPressure = pressure;
+        if (usableGpu()) {
+          return gpu;
+        }
+        throw pressure;
+      } catch (Throwable throwable) {
+        closeGpu();
+        throw new IllegalStateException(
+            "D3D12 texture resolve failed: id="
+                + textureId
+                + ", size="
+                + image.width()
+                + "x"
+                + image.height()
+                + ", maxLevel="
+                + image.maxLevel()
+                + ", revision="
+                + image.revision()
+                + ", cpuBytes="
+                + image.allocatedCpuBytes()
+                + ", registryCpuBytes="
+                + allocatedCpuBytes(),
+            throwable);
+      }
+    }
+
+    private void closeGpu() {
+      if (gpu != null) {
+        gpu.close();
+        gpu = null;
+      }
+      gpuReady = false;
+      gpuRevision = -1;
+      initialUploads = null;
+      dirtyUploads = null;
+      pressureBoundary = -1;
+      deferredPressure = null;
+    }
+
+    private boolean usableGpu() {
+      return gpuReady && gpu != null && gpu.valid();
+    }
+
+    private void drain(UploadQueue queue) {
+      while (!queue.complete()) {
+        UploadQueue.Band band = queue.next(MAX_UPLOAD_CHUNK_BYTES);
+        Image.Upload upload = band.upload();
+        gpu.update(
+            upload.level(),
+            upload.x(),
+            upload.y() + band.startRow(),
+            upload.width(),
+            band.rows(),
+            upload.rgba(),
+            band.sourceOffset(),
+            image.blur(),
+            image.clamp(),
+            image.mipmap());
+        queue.submitted(band);
+      }
+    }
+  }
+}

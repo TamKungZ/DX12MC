@@ -1,0 +1,20 @@
+{
+  "required": true,
+  "package": "net.dx12mc.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "GameRendererMixin",
+    "LevelRendererMixin",
+    "VertexBufferMixin",
+    "WindowMixin",
+    "GlStateManagerMixin",
+    "NativeImageMixin",
+    "TextureUtilMixin",
+    "RenderSystemMixin",
+    "BufferUploaderMixin",
+    "RenderTargetMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

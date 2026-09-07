@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "dx12mc",
+  "version": "${version}",
+  "name": "DX12MC",
+  "description": "Strict Direct3D 12 semantic render bridge for Minecraft Java: geometry, textures, state, lightmap and DXGI presentation via bgfx.",
+  "authors": [
+    "TamKungZ_"
+  ],
+  "contact": {},
+  "license": "GPL-3.0-only",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "net.dx12mc.client.Entrypoint"
+    ]
+  },
+  "mixins": [
+    "dx12mc.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.14",
+    "minecraft": "~1.21.1",
+    "java": ">=21"
+  }
+}
