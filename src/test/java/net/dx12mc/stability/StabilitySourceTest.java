@@ -253,7 +253,10 @@ class StabilitySourceTest {
         read("bridge/Bridge.java")
             + read("bridge/DrawContextFactory.java")
             + read("bridge/DrawContext.java")
-            + read("bridge/mesh/MeshStore.java");
+            + read("bridge/mesh/MeshStore.java")
+            + read("bridge/texture/Registry.java")
+            + read("bridge/texture/TextureEntry.java")
+            + read("graphics/bgfx/Packing.java");
     String state =
         read("bridge/state/RenderState.java") + read("bridge/state/BgfxStateEncoder.java");
     String config = read("config/Config.java");
@@ -274,6 +277,9 @@ class StabilitySourceTest {
     assertTrue(scene.contains("dx12mc.overlay.refreshMillis"));
     assertTrue(scene.contains("Previous frame CPU/GPU"));
     assertTrue(scene.contains("GC total / since overlay refresh"));
+    assertTrue(bridge.contains("createSection"));
+    assertTrue(bridge.contains("currentIfReady"));
+    assertTrue(bridge.contains("index32(Batch batch)"));
     String controller = read("render/Controller.java");
     assertTrue(controller.contains("if (debug.shouldRender(config.mode(), config.overlay()))"));
     assertTrue(controller.contains("private FrameSize frameSize(Window window)"));
@@ -294,8 +300,11 @@ class StabilitySourceTest {
     assertTrue(vertexBuffer.contains("method = \"draw()V\""));
     assertTrue(vertexBuffer.contains("drawSection(dx12mc$slot())"));
     assertTrue(runtime.contains("drawSection(Slot slot)"));
-    assertTrue(controller.contains("drawModelView"));
-    assertTrue(controller.contains(".set(modelView)"));
+    assertTrue(controller.contains("drawClipTransform"));
+    assertTrue(controller.contains("layerClipTransform"));
+    assertTrue(controller.contains(".mul(projection)"));
+    assertTrue(controller.contains(".mul(modelView)"));
+    assertTrue(controller.contains("bridge.drawSection"));
     assertFalse(controller.contains("new Matrix4f(modelView)"));
     assertTrue(controller.contains("translate(offsetX, offsetY, offsetZ)"));
     assertTrue(mixins.contains("LevelRendererMixin"));
