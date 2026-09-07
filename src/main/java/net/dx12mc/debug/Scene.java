@@ -1,5 +1,8 @@
 package net.dx12mc.debug;
 
+import java.lang.management.GarbageCollectorMXBean;
+import java.lang.management.ManagementFactory;
+import java.util.List;
 import net.dx12mc.DX12MC;
 import net.dx12mc.bridge.Stats;
 import net.dx12mc.config.Mode;
@@ -8,6 +11,23 @@ import net.dx12mc.graphics.bgfx.Backend;
 import net.dx12mc.graphics.bgfx.DebugText;
 
 public final class Scene {
+  private static final long OVERLAY_REFRESH_NANOS =
+      Math.max(50L, Long.getLong("dx12mc.overlay.refreshMillis", 250L)) * 1_000_000L;
+  private final List<GarbageCollectorMXBean> garbageCollectors =
+      ManagementFactory.getGarbageCollectorMXBeans();
+  private long nextOverlayRefreshNanos;
+  private long previousGcCollections;
+  private long previousGcMillis;
+  private boolean gcInitialized;
+
+  public boolean shouldRender(Mode mode, boolean overlay) {
+    if (mode == Mode.DEBUG) return true;
+    if (!overlay) return false;
+    long now = System.nanoTime();
+    if (now < nextOverlayRefreshNanos) return false;
+    nextOverlayRefreshNanos = now + OVERLAY_REFRESH_NANOS;
+    return true;
+  }
 
   public void render(
       Backend backend, FrameSize size, Mode mode, Stats.Snapshot stats, boolean overlay) {
@@ -19,6 +39,26 @@ public final class Scene {
     text.print(2, y++, 0x0A, "Renderer: " + backend.rendererName());
     text.print(2, y++, 0x0F, "Backbuffer: " + size.width() + " x " + size.height());
     text.print(2, y++, 0x0F, "Frame: " + backend.frameNumber());
+    Backend.FrameTiming timing = backend.frameTiming();
+    text.print(
+        2,
+        y++,
+        0x0F,
+        String.format(
+            java.util.Locale.ROOT,
+            "Previous frame CPU/GPU: %.2f / %.2f ms (draws %d)",
+            timing.cpuMillis(),
+            timing.gpuMillis(),
+            timing.draws()));
+    text.print(
+        2,
+        y++,
+        0x0F,
+        String.format(
+            java.util.Locale.ROOT,
+            "bgfx wait submit/render: %.2f / %.2f ms",
+            timing.waitSubmitMillis(),
+            timing.waitRenderMillis()));
     text.print(2, y++, 0x0B, "Path: Minecraft -> DX12MC -> bgfx -> Direct3D 12 / DXGI");
     text.print(2, y++, 0x0A, "Present owner: D3D12 ONLY (OpenGL SwapBuffers disabled)");
     text.print(2, y++, 0x0C, "Fallback policy: NONE - unsupported/failed native paths are fatal");
@@ -103,6 +143,34 @@ public final class Scene {
             + ", lightmapped "
             + stats.lightmappedSubmitTotal()
             + ")");
+    text.print(
+        2,
+        y++,
+        0x0F,
+        "Static / transient submits total: "
+            + stats.staticSubmitTotal()
+            + " / "
+            + stats.transientSubmitTotal());
+    long gcCollections = gcCollections();
+    long gcMillis = gcMillis();
+    long gcCollectionDelta = gcInitialized ? gcCollections - previousGcCollections : 0L;
+    long gcMillisDelta = gcInitialized ? gcMillis - previousGcMillis : 0L;
+    previousGcCollections = gcCollections;
+    previousGcMillis = gcMillis;
+    gcInitialized = true;
+    text.print(
+        2,
+        y++,
+        gcMillisDelta >= 25L ? 0x0C : 0x0F,
+        "GC total / since overlay refresh: "
+            + gcCollections
+            + " collections, "
+            + gcMillis
+            + " ms / +"
+            + gcCollectionDelta
+            + ", +"
+            + gcMillisDelta
+            + " ms");
     text.print(
         2,
         y++,
@@ -236,10 +304,7 @@ public final class Scene {
       text.print(2, y++, 0x0C, "D3D12 submit failures: " + stats.failedSubmitTotal());
     y++;
     text.print(
-        2,
-        y++,
-        0x08,
-        "Coverage 0.8.8: progressive native staging + stable residency + sorted indices");
+        2, y++, 0x08, "Coverage 0.8.10: frame pacing diagnostics + throttled native overlay");
     text.print(
         2, y++, 0x08, "Texture pixels mirror NativeImage CPU uploads; no OpenGL texture readback");
     text.print(
@@ -296,5 +361,21 @@ public final class Scene {
     double mib = kib / 1024.0;
     if (mib < 1024) return String.format(java.util.Locale.ROOT, "%.1f MiB", mib);
     return String.format(java.util.Locale.ROOT, "%.2f GiB", mib / 1024.0);
+  }
+
+  private long gcCollections() {
+    long total = 0L;
+    for (GarbageCollectorMXBean collector : garbageCollectors) {
+      total += Math.max(0L, collector.getCollectionCount());
+    }
+    return total;
+  }
+
+  private long gcMillis() {
+    long total = 0L;
+    for (GarbageCollectorMXBean collector : garbageCollectors) {
+      total += Math.max(0L, collector.getCollectionTime());
+    }
+    return total;
   }
 }

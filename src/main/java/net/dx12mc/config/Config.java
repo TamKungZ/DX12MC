@@ -6,9 +6,9 @@ public record Config(Mode mode, boolean vsync, int clearColorRgba, boolean overl
   public static Config load() {
     return new Config(
         Mode.parse(System.getProperty("dx12mc.mode", "native")),
-        Boolean.parseBoolean(System.getProperty("dx12mc.vsync", "true")),
+        Boolean.parseBoolean(System.getProperty("dx12mc.vsync", "false")),
         parseRgba(System.getProperty("dx12mc.clear", "18202AFF")),
-        Boolean.parseBoolean(System.getProperty("dx12mc.overlay", "true")));
+        Boolean.parseBoolean(System.getProperty("dx12mc.overlay", "false")));
   }
 
   public boolean nativeMode() {

@@ -51,6 +51,8 @@ The bridge is responsible for converting Minecraft render inputs into data the b
 
 The bridge keeps CPU mirrors for data that Minecraft may update asynchronously, such as sorted translucent indices or dirty texture regions. This lets DX12MC retry native work across frame boundaries without depending on stale OpenGL buffers.
 
+The steady-state section draw path avoids creating Java objects per draw. It reuses matrix, draw-context, and resident-metadata storage, caches shader classification while the active shader is unchanged, and reuses translated render-state snapshots until state or framebuffer dimensions change. Native vertex staging contains only attributes consumed by current shaders; richer compact attributes remain in the CPU batch until a shader family needs them.
+
 ## Backend Responsibilities
 
 The bgfx layer wraps the native resources used by the bridge:

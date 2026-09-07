@@ -2,6 +2,21 @@
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
+## 0.8.10 - Frame pacing diagnostics
+
+- Disabled VSync by default so missed refresh deadlines do not quantize performance into large FPS steps. It remains available with `-Ddx12mc.vsync=true`.
+- Limited the optional native diagnostic overlay to four refreshes per second instead of rebuilding more than 50 lines every rendered frame. Configure the interval with `dx12mc.overlay.refreshMillis`.
+- Added prior-frame bgfx CPU, GPU, submit-wait, render-wait, native draw-count, static/transient submission, and JVM garbage-collection timing to the diagnostic overlay.
+- Identified that the tested launcher profile forces a 32 MiB G1 region on a 2 GiB heap. That external JVM setting must be removed from the profile to avoid coarse, periodic collection work.
+
+## 0.8.9 - Native draw hot-path optimization
+
+- Reduced the D3D12 vertex stride from 52 to 32 bytes by staging only attributes consumed by the active shaders. Compact UV1 and normal data stays in the CPU batch for future shader families, while UV2 lightmap coordinates remain available to terrain rendering.
+- Reused section transforms, bridge matrix/draw-context storage, frame dimensions, and resident-mesh metadata instead of allocating them for every compiled-section draw or frame.
+- Cached translated render-state snapshots until the mirrored state or framebuffer dimensions change.
+- Cached shader-family and cutout classification until Minecraft changes the active shader.
+- Disabled the 54-line bgfx diagnostic overlay by default and avoided collecting its snapshot while hidden. It remains available with `-Ddx12mc.overlay=true`.
+
 ## 0.8.8 - Forward-progress staging + stable section residency
 
 - Texture creation and dirty updates now retain an exact upload cursor across frame-boundary backpressure. Successfully submitted regions are not resent, and partially populated native textures are preserved until they are complete.

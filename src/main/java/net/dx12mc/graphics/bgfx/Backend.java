@@ -5,6 +5,7 @@ import static org.lwjgl.bgfx.BGFX.*;
 import net.dx12mc.DX12MC;
 import net.dx12mc.graphics.FrameSize;
 import org.lwjgl.bgfx.BGFXInit;
+import org.lwjgl.bgfx.BGFXStats;
 
 public final class Backend implements AutoCloseable {
   public static final int MAIN_VIEW = 0;
@@ -77,6 +78,18 @@ public final class Backend implements AutoCloseable {
     return frameNumber;
   }
 
+  public FrameTiming frameTiming() {
+    ensureInitialized();
+    BGFXStats stats = bgfx_get_stats();
+    if (stats == null) return new FrameTiming(0.0, 0.0, 0.0, 0.0, 0);
+    return new FrameTiming(
+        milliseconds(stats.cpuTimeFrame(), stats.cpuTimerFreq()),
+        milliseconds(stats.gpuTimeEnd() - stats.gpuTimeBegin(), stats.gpuTimerFreq()),
+        milliseconds(stats.waitSubmit(), stats.cpuTimerFreq()),
+        milliseconds(stats.waitRender(), stats.cpuTimerFreq()),
+        stats.numDraw());
+  }
+
   public boolean initialized() {
     return initialized;
   }
@@ -105,9 +118,21 @@ public final class Backend implements AutoCloseable {
     return name == null ? Integer.toString(type) : name;
   }
 
+  private static double milliseconds(long ticks, long frequency) {
+    if (ticks <= 0L || frequency <= 0L) return 0.0;
+    return ticks * 1000.0 / frequency;
+  }
+
   private void ensureInitialized() {
     if (!initialized) {
       throw new IllegalStateException("bgfx backend is not initialized");
     }
   }
+
+  public record FrameTiming(
+      double cpuMillis,
+      double gpuMillis,
+      double waitSubmitMillis,
+      double waitRenderMillis,
+      int draws) {}
 }

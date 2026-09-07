@@ -232,11 +232,39 @@ class StabilitySourceTest {
     assertTrue(batch.contains("boolean hasUv2"));
     assertTrue(batch.contains("boolean hasNormal"));
     assertTrue(layout.contains("BGFX_ATTRIB_TEXCOORD2"));
-    assertTrue(layout.contains("BGFX_ATTRIB_NORMAL"));
-    assertTrue(packing.contains("VERTEX_STRIDE = 52"));
+    assertFalse(layout.contains("BGFX_ATTRIB_TEXCOORD1"));
+    assertFalse(layout.contains("BGFX_ATTRIB_NORMAL"));
+    assertTrue(packing.contains("VERTEX_STRIDE = 32"));
     assertTrue(bridge.contains("ShaderFamily.classify"));
     assertTrue(bridge.contains("RenderSystem.getShaderTexture(2)"));
     assertTrue(pipeline.contains("bgfx_set_texture(2"));
+  }
+
+  @Test
+  void nativeDrawHotPathReusesScratchObjectsAndDisablesDiagnosticOverlayByDefault()
+      throws IOException {
+    String bridge = read("bridge/Bridge.java");
+    String state = read("bridge/state/RenderState.java");
+    String config = read("config/Config.java");
+    String scene = read("debug/Scene.java");
+    assertTrue(bridge.contains("mvpScratch.set(projection).mul(modelView)"));
+    assertTrue(bridge.contains("private final DrawContext drawContext = new DrawContext()"));
+    assertTrue(bridge.contains("ResidentMesh resident = residentMeshes.get(slot)"));
+    assertTrue(bridge.contains("resident.touch(bytes, frameBoundary)"));
+    assertFalse(bridge.contains("new Matrix4f(projection)"));
+    assertFalse(bridge.contains("return new DrawContext("));
+    assertFalse(bridge.contains("residentMeshes.put(slot, new ResidentMesh(slot.mesh().bytes()"));
+    assertTrue(state.contains("cachedStandard.revision() == revision"));
+    assertTrue(state.contains("cachedImmediate.revision() == revision"));
+    assertTrue(state.contains("cachedSky.revision() == revision"));
+    assertTrue(config.contains("System.getProperty(\"dx12mc.overlay\", \"false\")"));
+    assertTrue(config.contains("System.getProperty(\"dx12mc.vsync\", \"false\")"));
+    assertTrue(scene.contains("dx12mc.overlay.refreshMillis"));
+    assertTrue(scene.contains("Previous frame CPU/GPU"));
+    assertTrue(scene.contains("GC total / since overlay refresh"));
+    String controller = read("render/Controller.java");
+    assertTrue(controller.contains("if (debug.shouldRender(config.mode(), config.overlay()))"));
+    assertTrue(controller.contains("private FrameSize frameSize(Window window)"));
   }
 
   @Test
@@ -254,7 +282,9 @@ class StabilitySourceTest {
     assertTrue(vertexBuffer.contains("method = \"draw()V\""));
     assertTrue(vertexBuffer.contains("drawSection(dx12mc$slot())"));
     assertTrue(runtime.contains("drawSection(Slot slot)"));
-    assertTrue(controller.contains("new Matrix4f(sectionModelView)"));
+    assertTrue(controller.contains("sectionDrawModelView"));
+    assertTrue(controller.contains(".set(sectionModelView)"));
+    assertFalse(controller.contains("new Matrix4f(sectionModelView)"));
     assertTrue(controller.contains("translate(sectionOffsetX, sectionOffsetY, sectionOffsetZ)"));
     assertTrue(mixins.contains("LevelRendererMixin"));
   }
