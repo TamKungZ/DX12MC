@@ -45,7 +45,7 @@ public final class ColorPipeline implements AutoCloseable {
 
   public boolean submit(Batch batch, float[] mvp, float[] color, RenderState.Snapshot state) {
     if (state.scissorEmpty()) return true;
-    boolean index32 = Packing.index32(batch.indices());
+    boolean index32 = Packing.index32(batch);
     try (MemoryStack stack = MemoryStack.stackPush()) {
       BGFXTransientVertexBuffer vertices = BGFXTransientVertexBuffer.calloc(stack);
       BGFXTransientIndexBuffer indices = BGFXTransientIndexBuffer.calloc(stack);

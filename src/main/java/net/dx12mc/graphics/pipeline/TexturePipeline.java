@@ -72,7 +72,7 @@ public final class TexturePipeline implements AutoCloseable {
       boolean cutout) {
     if (state.scissorEmpty()) return true;
     if (texture == null || !texture.valid()) return false;
-    boolean index32 = Packing.index32(batch.indices());
+    boolean index32 = Packing.index32(batch);
     try (MemoryStack stack = MemoryStack.stackPush()) {
       BGFXTransientVertexBuffer vertices = BGFXTransientVertexBuffer.calloc(stack);
       BGFXTransientIndexBuffer indices = BGFXTransientIndexBuffer.calloc(stack);

@@ -35,7 +35,7 @@ public final class Mesh implements AutoCloseable {
   }
 
   public static Mesh create(Batch batch, BGFXVertexLayout layout) {
-    boolean index32 = batch.vertexCount() > 0xFFFF || Packing.index32(batch.indices());
+    boolean index32 = Packing.index32(batch);
     int vertexBytes = Packing.vertexBytes(batch);
     int indexBytes =
         Math.multiplyExact(batch.indices().length, index32 ? Integer.BYTES : Short.BYTES);
@@ -72,7 +72,7 @@ public final class Mesh implements AutoCloseable {
   }
 
   public static long estimatedBytes(Batch batch) {
-    boolean index32 = batch.vertexCount() > 0xFFFF || Packing.index32(batch.indices());
+    boolean index32 = Packing.index32(batch);
     return (long) Packing.vertexBytes(batch)
         + (long) batch.indices().length * (index32 ? Integer.BYTES : Short.BYTES);
   }
@@ -83,7 +83,7 @@ public final class Mesh implements AutoCloseable {
       throw new IllegalStateException(
           "index update vertex generation no longer matches resident mesh");
     }
-    if (!index32 && Packing.index32(batch.indices())) {
+    if (!index32 && Packing.index32(batch)) {
       throw new IllegalStateException("index update requires wider index storage");
     }
     int newIndexBytes =
