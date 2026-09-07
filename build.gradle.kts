@@ -4,6 +4,7 @@ import java.util.Locale
 plugins {
     id("fabric-loom") version "1.11.8"
     `maven-publish`
+    signing
 }
 
 version = property("mod_version") as String
@@ -19,6 +20,8 @@ repositories {
 val minecraftVersion = property("minecraft_version") as String
 val loaderVersion = property("loader_version") as String
 val lwjglVersion = property("lwjgl_version") as String
+val githubRepository = providers.environmentVariable("GITHUB_REPOSITORY").orElse("TamKungZ/DX12MC")
+val signingKeyName = "dev@tamkungz.me"
 val bgfxWindowsNatives by configurations.creating
 val javaFormatter by configurations.creating
 val shadercCache = File(
@@ -269,7 +272,7 @@ dependencies {
     runtimeOnly("org.lwjgl:lwjgl-bgfx:$lwjglVersion:natives-windows")
     bgfxWindowsNatives("org.lwjgl:lwjgl-bgfx:$lwjglVersion:natives-windows")
     javaFormatter("com.google.googlejavaformat:google-java-format:1.36.1")
-    testImplementation(platform("org.junit:junit-bom:6.1.3"))
+    testImplementation(platform("org.junit:junit-bom:5.11.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
 }
 
@@ -376,11 +379,90 @@ tasks.remapJar {
     archiveFileName.set("dx12mc-${project.version}.jar")
 }
 
+extra["signing.gnupg.keyName"] = signingKeyName
+
+fun hasSigningKey(): Boolean {
+    if (!gradle.startParameter.taskNames.any { it.contains("publish", ignoreCase = true) || it.contains("sign", ignoreCase = true) }) {
+        return false
+    }
+    return try {
+        ProcessBuilder("gpg", "--batch", "--list-secret-keys", signingKeyName)
+            .redirectErrorStream(true)
+            .start()
+            .waitFor() == 0
+    } catch (_: Throwable) {
+        false
+    }
+}
+
 publishing {
     publications {
         create<MavenPublication>("mavenJava") {
             artifactId = property("archives_base_name") as String
             from(components["java"])
+            pom {
+                name.set("DX12MC")
+                description.set("Client-side Fabric mod that routes selected Minecraft Java rendering work through Direct3D 12 using bgfx.")
+                url.set("https://github.com/${githubRepository.get()}")
+                licenses {
+                    license {
+                        name.set("GNU General Public License v3.0")
+                        url.set("https://www.gnu.org/licenses/gpl-3.0.html")
+                    }
+                }
+                developers {
+                    developer {
+                        id.set("tamkungz")
+                        name.set("TamKungZ_")
+                        email.set("dev@tamkungz.me")
+                        roles.add("maintainer")
+                    }
+                }
+                scm {
+                    connection.set("scm:git:https://github.com/${githubRepository.get()}.git")
+                    developerConnection.set("scm:git:ssh://git@github.com/${githubRepository.get()}.git")
+                    url.set("https://github.com/${githubRepository.get()}")
+                }
+            }
         }
     }
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/${githubRepository.get()}")
+            credentials {
+                username = providers.gradleProperty("gpr.user")
+                    .orElse(providers.environmentVariable("GITHUB_ACTOR"))
+                    .orElse("tamkungz")
+                    .get()
+                password = providers.gradleProperty("gpr.key")
+                    .orElse(providers.environmentVariable("GITHUB_TOKEN"))
+                    .orElse(providers.environmentVariable("GH_TOKEN"))
+                    .orElse("")
+                    .get()
+            }
+        }
+    }
+}
+
+signing {
+    useGpgCmd()
+    isRequired = hasSigningKey()
+    sign(publishing.publications["mavenJava"])
+}
+
+tasks.withType<Sign>().configureEach {
+    onlyIf { hasSigningKey() }
+}
+
+tasks.register("publishLocalMaven") {
+    group = "publishing"
+    description = "Publishes DX12MC to the local Maven repository."
+    dependsOn("publishToMavenLocal")
+}
+
+tasks.register("publishGitHubPackage") {
+    group = "publishing"
+    description = "Publishes DX12MC to GitHub Packages."
+    dependsOn("publishMavenJavaPublicationToGitHubPackagesRepository")
 }
