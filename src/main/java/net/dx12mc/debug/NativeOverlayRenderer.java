@@ -13,7 +13,7 @@ final class NativeOverlayRenderer {
     renderTextures(writer, stats);
     renderMeshes(writer, stats);
     renderCompatibility(writer, stats);
-    renderCoverage(writer);
+    renderNotes(writer);
   }
 
   private static void renderCapture(OverlayWriter writer, Stats.Snapshot stats) {
@@ -193,35 +193,18 @@ final class NativeOverlayRenderer {
     writer.gap();
   }
 
-  private static void renderCoverage(OverlayWriter writer) {
-    writer.line(0x08, "Coverage 0.8.10: frame pacing diagnostics + throttled native overlay");
-    writer.line(0x08, "Texture pixels mirror NativeImage CPU uploads; no OpenGL texture readback");
+  private static void renderNotes(OverlayWriter writer) {
+    writer.line(0x08, "Note: read these counters with the same world, view and settings");
+    writer.line(0x08, "FPS also depends on render distance, resource packs, driver and JVM state");
+    writer.line(0x08, "Frame CPU/GPU times are more useful than one moment of FPS");
+    writer.line(0x08, "High GC delta points outside the renderer path shown here");
+    writer.line(0x08, "Deferred texture or section work usually means staging pressure this frame");
+    writer.line(0x08, "Streaming spills mean the resident mesh cache did not cover that draw");
+    writer.line(0x08, "Skipped clipped draws are expected when scissor removes all visible pixels");
     writer.line(
-        0x08, "Texture uploads are coalesced and staged lazily on D3D12 use (mips included)");
-    writer.line(
-        0x08,
-        "Compiled chunks use static D3D12 vertices + dynamic sorted index buffers + bounded"
-            + " residency");
-    writer.line(
-        0x08,
-        "Static bgfx allocation pressure spills to native transient D3D12 for the current frame");
-    writer.line(
-        0x08,
-        "Immediate blend bridge preserves special world-overlay blend modes (vignette no longer"
-            + " opaque)");
-    writer.line(
-        0x08,
-        "Cutout terrain uses native alpha discard; rendertype_lines remains semantically omitted");
-    writer.line(
-        0x08,
-        "Automatic world-icon capture is skipped at GameRenderer; raw GL readback remains"
-            + " forbidden");
-    writer.line(
-        0x08,
-        "Legacy GL menu blur/post chain is suppressed until native render-target translation"
-            + " lands");
-    writer.line(
-        0x08, "OpenGL bootstrap/context: retained only for Minecraft/GLFW lifecycle compatibility");
-    writer.line(0x08, "Direct3D 12 backend active");
+        0x08, "Submit failures and raw GL escapes are the main counters to treat as errors");
+    writer.line(0x08, "Memory current/peak values help compare scenes, not predict every stall");
+    writer.line(0x08, "Line overlays and menu blur are limited paths in this build");
+    writer.line(0x08, "Direct3D 12 backend is active for the native bridge counters above");
   }
 }
