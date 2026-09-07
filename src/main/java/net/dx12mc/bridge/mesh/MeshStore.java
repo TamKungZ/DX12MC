@@ -174,12 +174,15 @@ public final class MeshStore implements AutoCloseable {
     if (resident == null) {
       residents.put(slot, new ResidentMesh(bytes, frameBoundary));
       residentBytes += bytes;
+      publishResidentStats();
     } else {
-      residentBytes += bytes - resident.bytes;
-      resident.bytes = bytes;
+      if (resident.bytes != bytes) {
+        residentBytes += bytes - resident.bytes;
+        resident.bytes = bytes;
+        publishResidentStats();
+      }
       resident.lastUsedFrame = frameBoundary;
     }
-    publishResidentStats();
   }
 
   private void forgetResident(Slot slot) {
