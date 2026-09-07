@@ -45,6 +45,18 @@ final class DrawContextFactory {
         batch.hasUv0(), sampled, lightmap != null, lightmap, classifiedShaderCutout, state);
   }
 
+  DrawContext createSection(
+      Batch batch, Matrix4f clipTransform, int framebufferWidth, int framebufferHeight) {
+    prepareSectionUniforms(clipTransform);
+    String shader = shaderName();
+    classifyShader(shader);
+    Texture sampled = resolveBaseTexture(batch, shader);
+    Texture lightmap = resolveLightmap(batch, classifiedShaderFamily);
+    RenderState.Snapshot state = snapshot(framebufferWidth, framebufferHeight, false);
+    return context.set(
+        batch.hasUv0(), sampled, lightmap != null, lightmap, classifiedShaderCutout, state);
+  }
+
   void semanticIntent(String intent) {
     skyIntent = intent != null && intent.startsWith("level.sky");
   }
@@ -68,6 +80,12 @@ final class DrawContextFactory {
   private void prepareUniforms(Matrix4f modelView, Matrix4f projection) {
     mvpScratch.set(projection).mul(modelView);
     clipScratch.identity().m22(0.5f).m32(0.5f).mul(mvpScratch).get(matrix);
+    RenderSystem.getTextureMatrix().get(textureMatrix);
+    System.arraycopy(RenderSystem.getShaderColor(), 0, tint, 0, tint.length);
+  }
+
+  private void prepareSectionUniforms(Matrix4f clipTransform) {
+    clipTransform.get(matrix);
     RenderSystem.getTextureMatrix().get(textureMatrix);
     System.arraycopy(RenderSystem.getShaderColor(), 0, tint, 0, tint.length);
   }

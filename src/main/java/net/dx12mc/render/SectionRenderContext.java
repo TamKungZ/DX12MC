@@ -3,18 +3,20 @@ package net.dx12mc.render;
 import org.joml.Matrix4f;
 
 final class SectionRenderContext {
-  private final Matrix4f modelView = new Matrix4f();
-  private final Matrix4f projection = new Matrix4f();
-  private final Matrix4f drawModelView = new Matrix4f();
+  private final Matrix4f layerClipTransform = new Matrix4f();
+  private final Matrix4f drawClipTransform = new Matrix4f();
   private boolean active;
   private boolean matricesValid;
+  private int framebufferWidth;
+  private int framebufferHeight;
   private float offsetX;
   private float offsetY;
   private float offsetZ;
 
-  void begin(Matrix4f modelView, Matrix4f projection) {
-    this.modelView.set(modelView);
-    this.projection.set(projection);
+  void begin(Matrix4f modelView, Matrix4f projection, int framebufferWidth, int framebufferHeight) {
+    layerClipTransform.identity().m22(0.5f).m32(0.5f).mul(projection).mul(modelView);
+    this.framebufferWidth = framebufferWidth;
+    this.framebufferHeight = framebufferHeight;
     offsetX = offsetY = offsetZ = 0.0f;
     matricesValid = true;
     active = true;
@@ -27,12 +29,16 @@ final class SectionRenderContext {
     offsetZ = z;
   }
 
-  Matrix4f drawModelView() {
-    return drawModelView.set(modelView).translate(offsetX, offsetY, offsetZ);
+  Matrix4f drawClipTransform() {
+    return drawClipTransform.set(layerClipTransform).translate(offsetX, offsetY, offsetZ);
   }
 
-  Matrix4f projection() {
-    return projection;
+  int framebufferWidth() {
+    return framebufferWidth;
+  }
+
+  int framebufferHeight() {
+    return framebufferHeight;
   }
 
   boolean active() {
@@ -46,6 +52,7 @@ final class SectionRenderContext {
   void end() {
     active = false;
     matricesValid = false;
+    framebufferWidth = framebufferHeight = 0;
     offsetX = offsetY = offsetZ = 0.0f;
   }
 }

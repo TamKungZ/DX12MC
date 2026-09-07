@@ -253,6 +253,67 @@ public final class Bridge implements AutoCloseable {
     return true;
   }
 
+  public boolean drawSection(
+      Slot slot, Matrix4f clipTransform, int framebufferWidth, int framebufferHeight) {
+    requireStarted();
+    if (slot == null || slot.batch() == null) {
+      throw unsupported("Section VertexBuffer draw has no captured D3D12 mesh");
+    }
+    Batch batch = slot.batch();
+    DrawContext context;
+    try {
+      context = contexts.createSection(batch, clipTransform, framebufferWidth, framebufferHeight);
+    } catch (StagingBackpressureException pressure) {
+      stats.deferredSectionDraw();
+      return true;
+    }
+    if (context.state().scissorEmpty()) {
+      stats.scissorSkippedDraw();
+      return true;
+    }
+    if (slot.dynamic()) {
+      boolean success = submitTransient(batch, context);
+      stats.submitted(batch, success, true, context.textured(), context.lightmapped());
+      if (!success) {
+        throw unsupported(
+            "bgfx/D3D12 rejected dynamic section submission: mode="
+                + batch.sourceMode()
+                + ", vertices="
+                + batch.vertexCount()
+                + ", indices="
+                + batch.indices().length
+                + ", shader="
+                + DrawContextFactory.shaderName());
+      }
+      return true;
+    }
+    Mesh gpu = meshes.resident(slot, pipelines.layout());
+    if (gpu == null || !gpu.valid()) {
+      stats.nativeStreamingSpill();
+      boolean success = submitTransient(batch, context);
+      if (!success) {
+        stats.deferredSectionDraw();
+        return true;
+      }
+      stats.submitted(batch, true, true, context.textured(), context.lightmapped());
+      return true;
+    }
+    boolean success = submitPersistent(gpu, context);
+    stats.submitted(batch, success, false, context.textured(), context.lightmapped());
+    if (!success) {
+      throw unsupported(
+          "bgfx/D3D12 rejected section submission: mode="
+              + batch.sourceMode()
+              + ", vertices="
+              + batch.vertexCount()
+              + ", indices="
+              + batch.indices().length
+              + ", shader="
+              + DrawContextFactory.shaderName());
+    }
+    return true;
+  }
+
   public boolean drawImmediate(
       MeshData mesh,
       Matrix4f modelView,

@@ -249,7 +249,12 @@ public final class Controller implements AutoCloseable {
     if (modelView == null || projection == null) {
       throw fatal("Minecraft section-layer draw supplied null matrices.", null);
     }
-    section.begin(modelView, projection);
+    Minecraft minecraft = Minecraft.getInstance();
+    lifecycle.ensureInitialized(minecraft);
+    lifecycle.requireActive("section-layer draw");
+    lifecycle.ensureFrame(minecraft);
+    Window window = minecraft.getWindow();
+    section.begin(modelView, projection, window.getWidth(), window.getHeight());
     this.semanticIntent = "level.section-layer";
     if (bridge != null) bridge.semanticIntent(this.semanticIntent);
   }
@@ -264,9 +269,22 @@ public final class Controller implements AutoCloseable {
     if (!section.ready()) {
       throw fatal("D3D12 section-layer context is incomplete.", null);
     }
-    boolean submitted = draw(slot, section.drawModelView(), section.projection());
-    if (submitted) stats.sectionLayerDraw();
-    return submitted;
+    try {
+      if (!bridge.drawSection(
+          slot,
+          section.drawClipTransform(),
+          section.framebufferWidth(),
+          section.framebufferHeight())) {
+        throw new IllegalStateException("D3D12 bridge returned no section submission");
+      }
+      stats.cancelledVanillaDraw();
+      stats.sectionLayerDraw();
+      return true;
+    } catch (FatalRenderException fatal) {
+      throw fatal;
+    } catch (Throwable throwable) {
+      throw fatal("Native D3D12 section submission failed.", throwable);
+    }
   }
 
   public void endSectionLayer() {
