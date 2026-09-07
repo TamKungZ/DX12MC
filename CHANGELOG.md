@@ -2,6 +2,15 @@
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
+## 0.8.11 - Section draw hot-path cleanup
+
+- Precompute section-layer clip transforms and framebuffer dimensions once per layer so visible sections avoid repeated lifecycle, window and matrix work.
+- Add a section-specific native draw path while preserving resident mesh reuse, transient dynamic sections, streaming spill behavior and strict D3D12 error handling.
+- Cache clean texture resolve lookups and reuse ready GPU textures without repeating upload bookkeeping.
+- Avoid scanning every index array on submission by deriving index width from the validated batch vertex count.
+- Publish resident mesh stats only when resident byte totals actually change.
+- Remove Java source comments after the optimization pass.
+
 ## 0.8.10 - Frame pacing diagnostics
 
 - Split renderer lifecycle, section transforms, draw-context resolution, pipeline ownership, mesh residency, texture GPU synchronization, mip dirty tracking, state encoding, and overlay formatting into cohesive components while preserving the existing Minecraft-facing APIs and render behavior.
