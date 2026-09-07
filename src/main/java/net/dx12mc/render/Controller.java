@@ -6,36 +6,19 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexBuffer;
-import net.dx12mc.DX12MC;
 import net.dx12mc.bridge.Bridge;
 import net.dx12mc.bridge.Slot;
 import net.dx12mc.bridge.Stats;
 import net.dx12mc.config.Config;
-import net.dx12mc.debug.Scene;
-import net.dx12mc.graphics.FrameSize;
-import net.dx12mc.graphics.bgfx.Backend;
-import net.dx12mc.graphics.bgfx.Probe;
-import net.dx12mc.graphics.bgfx.ProbeResult;
-import net.dx12mc.platform.win32.WindowHandle;
 import net.minecraft.client.Minecraft;
 import org.joml.Matrix4f;
 
 public final class Controller implements AutoCloseable {
   private final Config config;
-  private final Backend backend = new Backend();
   private final Stats stats = new Stats();
-  private final Scene debug = new Scene();
   private final Bridge bridge;
-  private State state = State.NEW;
-  private boolean frameOpen;
-  private FatalRenderException failure;
-  private boolean sectionLayerActive;
-  private final Matrix4f sectionModelView = new Matrix4f();
-  private final Matrix4f sectionProjection = new Matrix4f();
-  private final Matrix4f sectionDrawModelView = new Matrix4f();
-  private FrameSize currentFrameSize = new FrameSize(1, 1);
-  private boolean sectionMatricesValid;
-  private float sectionOffsetX, sectionOffsetY, sectionOffsetZ;
+  private final RendererLifecycle lifecycle;
+  private final SectionRenderContext section = new SectionRenderContext();
   private String semanticIntent = "frame";
   private int legacyVertexBufferUploadDepth;
   private static final int GL_ARRAY_BUFFER = 0x8892;
@@ -43,32 +26,17 @@ public final class Controller implements AutoCloseable {
   public Controller(Config config) {
     this.config = config;
     this.bridge = config.nativeMode() ? new Bridge(stats) : null;
+    this.lifecycle = new RendererLifecycle(config, bridge, stats);
   }
 
   public void initialize() {
-    DX12MC.LOGGER.info(
-        "DX12MC {} loaded. mode={}, vsync={}, overlay={}, strictD3D12={}",
-        DX12MC.VERSION,
-        config.mode(),
-        config.vsync(),
-        config.overlay(),
-        !config.probeMode());
-    if (config.probeMode()) {
-      DX12MC.LOGGER.warn(
-          "PROBE MODE: renderer takeover is intentionally disabled; vanilla OpenGL may present only"
-              + " in this explicit diagnostic mode.");
-    } else {
-      DX12MC.LOGGER.warn(
-          "STRICT D3D12 POLICY: no OpenGL draw fallback and no OpenGL SwapBuffers fallback. Any"
-              + " untranslated/failed native path is fatal.");
-    }
-    DX12MC.LOGGER.info("Native path: Minecraft geometry -> DX12MC -> bgfx -> Direct3D 12 / DXGI.");
+    lifecycle.initialize();
   }
 
   public void capture(Slot slot, MeshData mesh, VertexBuffer.Usage usage) {
     if (!config.nativeMode()) return;
     throwIfFailed();
-    if (state == State.CLOSED) return;
+    if (lifecycle.closed()) return;
     try {
       bridge.capture(slot, mesh, usage);
     } catch (Throwable throwable) {
@@ -81,7 +49,7 @@ public final class Controller implements AutoCloseable {
   public void updateIndices(Slot slot, ByteBufferBuilder.Result result) {
     if (!config.nativeMode()) return;
     throwIfFailed();
-    if (state == State.CLOSED || result == null) return;
+    if (lifecycle.closed() || result == null) return;
     try {
       bridge.updateIndices(slot, result.byteBuffer());
     } catch (Throwable throwable) {
@@ -99,7 +67,7 @@ public final class Controller implements AutoCloseable {
   }
 
   public boolean suppressLegacyVertexBufferStorage(int target, long bytes) {
-    if (!config.nativeMode() || state != State.ACTIVE || legacyVertexBufferUploadDepth <= 0)
+    if (!config.nativeMode() || !lifecycle.active() || legacyVertexBufferUploadDepth <= 0)
       return false;
     if (target != GL_ARRAY_BUFFER) return false;
     stats.suppressedLegacyVertexStorage(bytes);
@@ -109,7 +77,7 @@ public final class Controller implements AutoCloseable {
   public void bindTexture(int id) {
     if (!config.nativeMode()) return;
     throwIfFailed();
-    if (state != State.CLOSED) bridge.bindTexture(id);
+    if (!lifecycle.closed()) bridge.bindTexture(id);
   }
 
   public void depthTest(boolean enabled) {
@@ -179,7 +147,7 @@ public final class Controller implements AutoCloseable {
   public void allocateTexture(int id, int maxLevel, int width, int height) {
     if (!config.nativeMode()) return;
     throwIfFailed();
-    if (state == State.CLOSED) return;
+    if (lifecycle.closed()) return;
     try {
       bridge.allocateTexture(id, maxLevel, width, height);
       stats.textureCpuBytes(bridge.textureCpuBytes());
@@ -191,7 +159,7 @@ public final class Controller implements AutoCloseable {
   public void mirrorBoundOpenGlTextureAllocation(int level, int width, int height) {
     if (!config.nativeMode()) return;
     throwIfFailed();
-    if (state == State.CLOSED) return;
+    if (lifecycle.closed()) return;
     try {
       bridge.allocateBoundTextureLevel(level, width, height);
       stats.textureCpuBytes(bridge.textureCpuBytes());
@@ -222,7 +190,7 @@ public final class Controller implements AutoCloseable {
       boolean mipmap) {
     if (!config.nativeMode()) return;
     throwIfFailed();
-    if (state == State.CLOSED) return;
+    if (lifecycle.closed()) return;
     try {
       bridge.uploadTexture(
           image, level, offsetX, offsetY, skipPixels, skipRows, width, height, blur, clamp, mipmap);
@@ -240,16 +208,16 @@ public final class Controller implements AutoCloseable {
   }
 
   public void onRenderHead(Minecraft minecraft) {
-    ensureInitialized(minecraft);
+    lifecycle.ensureInitialized(minecraft);
   }
 
   public boolean draw(Slot slot, Matrix4f modelView, Matrix4f projection) {
     if (!config.nativeMode()) return false;
     throwIfFailed();
-    ensureInitialized(Minecraft.getInstance());
-    requireActive("VertexBuffer draw");
+    lifecycle.ensureInitialized(Minecraft.getInstance());
+    lifecycle.requireActive("VertexBuffer draw");
     try {
-      ensureFrame(Minecraft.getInstance());
+      lifecycle.ensureFrame(Minecraft.getInstance());
       Window window = Minecraft.getInstance().getWindow();
       if (!bridge.draw(slot, modelView, projection, window.getWidth(), window.getHeight())) {
         throw new IllegalStateException("D3D12 bridge returned no submission");
@@ -281,40 +249,28 @@ public final class Controller implements AutoCloseable {
     if (modelView == null || projection == null) {
       throw fatal("Minecraft section-layer draw supplied null matrices.", null);
     }
-    this.sectionModelView.set(modelView);
-    this.sectionProjection.set(projection);
-    this.sectionMatricesValid = true;
-    this.sectionOffsetX = this.sectionOffsetY = this.sectionOffsetZ = 0.0f;
-    this.sectionLayerActive = true;
+    section.begin(modelView, projection);
     this.semanticIntent = "level.section-layer";
     if (bridge != null) bridge.semanticIntent(this.semanticIntent);
   }
 
   public void sectionChunkOffset(float x, float y, float z) {
-    if (!sectionLayerActive) return;
-    this.sectionOffsetX = x;
-    this.sectionOffsetY = y;
-    this.sectionOffsetZ = z;
+    section.offset(x, y, z);
   }
 
   public boolean drawSection(Slot slot) {
-    if (!config.nativeMode() || !sectionLayerActive) return false;
+    if (!config.nativeMode() || !section.active()) return false;
     throwIfFailed();
-    if (!sectionMatricesValid) {
+    if (!section.ready()) {
       throw fatal("D3D12 section-layer context is incomplete.", null);
     }
-    sectionDrawModelView
-        .set(sectionModelView)
-        .translate(sectionOffsetX, sectionOffsetY, sectionOffsetZ);
-    boolean submitted = draw(slot, sectionDrawModelView, sectionProjection);
+    boolean submitted = draw(slot, section.drawModelView(), section.projection());
     if (submitted) stats.sectionLayerDraw();
     return submitted;
   }
 
   public void endSectionLayer() {
-    this.sectionLayerActive = false;
-    this.sectionMatricesValid = false;
-    this.sectionOffsetX = this.sectionOffsetY = this.sectionOffsetZ = 0.0f;
+    section.end();
     this.semanticIntent = "frame";
     if (bridge != null) bridge.semanticIntent(this.semanticIntent);
   }
@@ -322,10 +278,10 @@ public final class Controller implements AutoCloseable {
   public boolean drawImmediate(MeshData mesh) {
     if (!config.nativeMode()) return false;
     throwIfFailed();
-    ensureInitialized(Minecraft.getInstance());
-    requireActive("immediate MeshData draw");
+    lifecycle.ensureInitialized(Minecraft.getInstance());
+    lifecycle.requireActive("immediate MeshData draw");
     try {
-      ensureFrame(Minecraft.getInstance());
+      lifecycle.ensureFrame(Minecraft.getInstance());
       Window window = Minecraft.getInstance().getWindow();
       if (!bridge.drawImmediate(
           mesh,
@@ -351,29 +307,7 @@ public final class Controller implements AutoCloseable {
   }
 
   public void presentAtSwap(Minecraft minecraft) {
-    if (config.probeMode()) {
-      throw new IllegalStateException("presentAtSwap must not be used in probe mode");
-    }
-    throwIfFailed();
-    ensureInitialized(minecraft);
-    requireActive("D3D12 present");
-    try {
-      ensureFrame(minecraft);
-      if (!frameOpen) throw new IllegalStateException("D3D12 frame was not opened before present");
-      FrameSize size = frameSize(minecraft.getWindow());
-      if (debug.shouldRender(config.mode(), config.overlay())) {
-        debug.render(backend, size, config.mode(), stats.snapshot(), config.overlay());
-      }
-      backend.endFrame();
-      frameOpen = false;
-      if (bridge != null) bridge.onFrameBoundary();
-      stats.suppressedOpenGlSwap();
-      stats.nextFrame();
-    } catch (FatalRenderException fatal) {
-      throw fatal;
-    } catch (Throwable throwable) {
-      throw fatal("D3D12 frame submission/present failed.", throwable);
-    }
+    lifecycle.present(minecraft);
   }
 
   public boolean openGlPresentationAllowed() {
@@ -383,7 +317,7 @@ public final class Controller implements AutoCloseable {
   public boolean suppressVanillaFramebufferBlit() {
     if (config.probeMode()) return false;
     throwIfFailed();
-    if (state != State.ACTIVE) return false;
+    if (!lifecycle.active()) return false;
     stats.suppressedOpenGlFramebufferBlit();
     return true;
   }
@@ -391,7 +325,7 @@ public final class Controller implements AutoCloseable {
   public boolean suppressLegacyBlurPostProcess() {
     if (config.probeMode()) return false;
     throwIfFailed();
-    if (state != State.ACTIVE) return false;
+    if (!lifecycle.active()) return false;
     stats.suppressedLegacyBlur();
     return true;
   }
@@ -399,16 +333,15 @@ public final class Controller implements AutoCloseable {
   public boolean suppressAutomaticWorldIconCapture() {
     if (config.probeMode()) return false;
     throwIfFailed();
-    if (state != State.ACTIVE) return false;
+    if (!lifecycle.active()) return false;
     stats.suppressedAutomaticWorldIconCapture();
     return true;
   }
 
   public void assertOpenGlDrawAllowed(String operation) {
-    if (config.probeMode() || state == State.NEW || state == State.PROBED || state == State.CLOSED)
-      return;
+    if (lifecycle.openGlGuardAllowed()) return;
     throwIfFailed();
-    if (state == State.ACTIVE) {
+    if (lifecycle.active()) {
       stats.rawOpenGlEscape();
       throw fatal(
           "Raw OpenGL draw escaped the D3D12 bridge after takeover: "
@@ -421,10 +354,9 @@ public final class Controller implements AutoCloseable {
   }
 
   public void assertOpenGlReadbackAllowed(String operation) {
-    if (config.probeMode() || state == State.NEW || state == State.PROBED || state == State.CLOSED)
-      return;
+    if (lifecycle.openGlGuardAllowed()) return;
     throwIfFailed();
-    if (state == State.ACTIVE) {
+    if (lifecycle.active()) {
       throw fatal(
           "OpenGL readback requested after D3D12 takeover: "
               + operation
@@ -436,154 +368,24 @@ public final class Controller implements AutoCloseable {
   }
 
   public boolean shouldCancelGameRenderer() {
-    return config.debugMode() && state == State.ACTIVE;
+    return config.debugMode() && lifecycle.active();
   }
 
   @Override
   public void close() {
-    if (state == State.CLOSED) return;
-    state = State.CLOSED;
-    frameOpen = false;
-    sectionLayerActive = false;
-    sectionMatricesValid = false;
+    if (lifecycle.closed()) return;
+    section.end();
     legacyVertexBufferUploadDepth = 0;
-    closeBridge();
-    backend.close();
-  }
-
-  private void ensureInitialized(Minecraft minecraft) {
-    throwIfFailed();
-    if (state != State.NEW) return;
-    if (minecraft == null) {
-      throw fatal(
-          "Minecraft instance was unavailable while DX12MC needed to initialize D3D12.", null);
-    }
-    if (!WindowHandle.supported()) {
-      if (config.probeMode()) {
-        state = State.PROBED;
-        DX12MC.LOGGER.warn(
-            "DX12MC D3D12 probe/takeover is Windows-only; probe mode leaves vanilla rendering"
-                + " untouched.");
-        return;
-      }
-      throw fatal("DX12MC strict D3D12 rendering currently supports Windows only.", null);
-    }
-    try {
-      Window window = minecraft.getWindow();
-      long glfwWindow = window.getWindow();
-      long hwnd = WindowHandle.fromGlfw(glfwWindow);
-      ProbeResult probe = Probe.detect();
-      DX12MC.LOGGER.info(
-          "Minecraft GLFW window=0x{}, HWND=0x{}",
-          Long.toHexString(glfwWindow),
-          Long.toHexString(hwnd));
-      DX12MC.LOGGER.info("bgfx renderer candidates: {}", probe.renderers());
-      if (!probe.direct3D12Available()) {
-        throw new IllegalStateException(
-            "bgfx does not report a Direct3D 12 backend on this machine/build; candidates="
-                + probe.renderers());
-      }
-      DX12MC.LOGGER.info("Direct3D 12 backend detected.");
-      if (config.probeMode()) {
-        state = State.PROBED;
-        DX12MC.LOGGER.info(
-            "Probe complete; no renderer takeover was performed. OpenGL remains active only because"
-                + " probe mode was explicitly requested.");
-        return;
-      }
-      backend.initialize(
-          hwnd,
-          frameSize(window),
-          config.vsync(),
-          config.clearColorRgba(),
-          config.debugMode() || config.overlay());
-      if (config.nativeMode()) {
-        bridge.start();
-        DX12MC.LOGGER.warn(
-            "NATIVE D3D12 BRIDGE ACTIVE: geometry + texture + per-draw render state are"
-                + " native-only; untranslated paths are fatal.");
-      } else {
-        DX12MC.LOGGER.warn(
-            "DEBUG D3D12 MODE ACTIVE: Minecraft GameRenderer is bypassed; bgfx/D3D12 owns the"
-                + " visible frame.");
-      }
-      DX12MC.LOGGER.warn(
-          "D3D12 PRESENT OWNER ACTIVE: GLFW window/event lifecycle remains, OpenGL context may"
-              + " remain for bootstrap compatibility, but OpenGL SwapBuffers is disabled.");
-      state = State.ACTIVE;
-    } catch (FatalRenderException fatal) {
-      throw fatal;
-    } catch (Throwable throwable) {
-      throw fatal("Unable to initialize the Direct3D 12 renderer.", throwable);
-    }
-  }
-
-  private void ensureFrame(Minecraft minecraft) {
-    throwIfFailed();
-    if (frameOpen) return;
-    if (state != State.ACTIVE)
-      throw new IllegalStateException("D3D12 frame requested while renderer state=" + state);
-    if (minecraft == null) throw new IllegalStateException("Minecraft instance is null");
-    backend.beginFrame(frameSize(minecraft.getWindow()));
-    frameOpen = true;
-  }
-
-  private void requireActive(String operation) {
-    throwIfFailed();
-    if (state != State.ACTIVE) {
-      throw fatal(operation + " requested while renderer state=" + state + ".", null);
-    }
+    lifecycle.close();
   }
 
   private void throwIfFailed() {
-    if (failure != null) throw failure;
+    lifecycle.throwIfFailed();
   }
 
   private FatalRenderException fatal(String message, Throwable cause) {
-    if (failure != null) return failure;
-    state = State.FAILED;
-    frameOpen = false;
-    sectionLayerActive = false;
-    sectionMatricesValid = false;
+    section.end();
     legacyVertexBufferUploadDepth = 0;
-    String full =
-        "DX12MC STRICT D3D12 ERROR: "
-            + message
-            + " OpenGL rendering/presentation fallback is disabled by design.";
-    failure = new FatalRenderException(full, cause);
-    DX12MC.LOGGER.error(full, cause);
-    closeBridge();
-    try {
-      backend.close();
-    } catch (Throwable closeFailure) {
-      failure.addSuppressed(closeFailure);
-    }
-    return failure;
-  }
-
-  private void closeBridge() {
-    if (bridge == null) return;
-    try {
-      bridge.close();
-    } catch (Throwable throwable) {
-      DX12MC.LOGGER.debug("Error while releasing native bridge resources", throwable);
-    }
-  }
-
-  private FrameSize frameSize(Window window) {
-    int width = Math.max(1, window.getWidth());
-    int height = Math.max(1, window.getHeight());
-    if (currentFrameSize.width() != width || currentFrameSize.height() != height) {
-      currentFrameSize = new FrameSize(width, height);
-    }
-    return currentFrameSize;
-  }
-
-  private enum State {
-    NEW,
-    PROBED,
-    ACTIVE,
-    FAILED,
-    CLOSED
+    return lifecycle.fail(message, cause);
   }
 }
