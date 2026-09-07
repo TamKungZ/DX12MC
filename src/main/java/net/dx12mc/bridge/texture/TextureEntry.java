@@ -56,6 +56,17 @@ final class TextureEntry implements AutoCloseable {
     }
   }
 
+  Texture currentIfReady() {
+    return gpuReady
+            && gpuRevision == image.revision()
+            && initialUploads == null
+            && dirtyUploads == null
+            && gpu != null
+            && gpu.valid()
+        ? gpu
+        : null;
+  }
+
   private void createGpuIfNeeded() {
     if (gpu != null && gpu.valid()) return;
     gpu =

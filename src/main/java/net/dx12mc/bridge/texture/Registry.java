@@ -15,6 +15,8 @@ public final class Registry implements AutoCloseable {
   private boolean started;
   private long cpuBytes;
   private long frameBoundary;
+  private int cachedResolvedId;
+  private TextureEntry cachedResolvedEntry;
 
   public Registry(Stats stats) {
     this.stats = stats;
@@ -30,6 +32,7 @@ public final class Registry implements AutoCloseable {
 
   public void allocate(int id, int maxLevel, int width, int height) {
     if (id <= 0 || width <= 0 || height <= 0) return;
+    if (cachedResolvedId == id) clearResolvedCache();
     TextureEntry existing = entries.get(id);
     if (existing == null) {
       entries.put(id, new TextureEntry(new Image(width, height, maxLevel), true, stats));
@@ -73,6 +76,7 @@ public final class Registry implements AutoCloseable {
       throw new IllegalArgumentException(
           "invalid raw texture allocation: level=" + level + ", size=" + width + "x" + height);
     }
+    if (cachedResolvedId == boundId) clearResolvedCache();
     TextureEntry entry = entries.get(boundId);
     if (entry == null) {
       if (level != 0) {
@@ -196,8 +200,15 @@ public final class Registry implements AutoCloseable {
 
   public Texture resolve(int id) {
     if (!started || id <= 0) return null;
-    TextureEntry entry = entries.get(id);
+    TextureEntry entry =
+        id == cachedResolvedId && cachedResolvedEntry != null
+            ? cachedResolvedEntry
+            : entries.get(id);
     if (entry == null || !entry.image.hasBasePixels()) return null;
+    cachedResolvedId = id;
+    cachedResolvedEntry = entry;
+    Texture ready = entry.currentIfReady();
+    if (ready != null) return ready;
     return entry.resolve(id, frameBoundary, allocatedCpuBytes());
   }
 
@@ -207,6 +218,7 @@ public final class Registry implements AutoCloseable {
       entry.close();
       cpuBytes -= entry.image.allocatedCpuBytes();
     }
+    if (cachedResolvedId == id) clearResolvedCache();
     if (boundId == id) boundId = 0;
   }
 
@@ -230,6 +242,12 @@ public final class Registry implements AutoCloseable {
     started = false;
     cpuBytes = 0;
     frameBoundary = 0;
+    clearResolvedCache();
+  }
+
+  private void clearResolvedCache() {
+    cachedResolvedId = 0;
+    cachedResolvedEntry = null;
   }
 
   private void growInferred(
