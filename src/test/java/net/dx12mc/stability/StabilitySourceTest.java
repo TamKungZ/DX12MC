@@ -33,7 +33,7 @@ class StabilitySourceTest {
   @Test
   void nativeDrawFailuresAreFatalInsteadOfReturningToOpenGl() throws IOException {
     String controller = read("render/Controller.java");
-    String bridge = read("bridge/Bridge.java");
+    String bridge = read("bridge/Bridge.java") + read("bridge/DrawContextFactory.java");
     String config = read("config/Config.java");
     assertTrue(controller.contains("STRICT D3D12 POLICY"));
     assertTrue(controller.contains("throw fatal("));
@@ -83,8 +83,9 @@ class StabilitySourceTest {
   @Test
   void nativeStagingIsBoundedAndSparseTextureUpdatesStaySparse() throws IOException {
     String texture = read("graphics/bgfx/Texture.java");
-    String registry = read("bridge/texture/Registry.java");
-    String image = read("bridge/texture/Image.java");
+    String registry =
+        read("bridge/texture/Registry.java") + read("bridge/texture/TextureEntry.java");
+    String image = read("bridge/texture/Image.java") + read("bridge/texture/MipLevel.java");
     String mesh = read("graphics/bgfx/Mesh.java");
     String program = read("graphics/bgfx/Program.java");
     String staging = read("graphics/bgfx/StagingMemory.java");
@@ -112,8 +113,8 @@ class StabilitySourceTest {
     assertTrue(registry.contains("throw pressure"));
     assertFalse(registry.contains("catch (Throwable ignored)"));
     assertTrue(image.contains("MAX_DIRTY_REGIONS"));
-    assertTrue(image.contains("touches(existing, merged)"));
-    assertTrue(image.contains("union(existing, merged)"));
+    assertTrue(image.contains("existing.touches(merged)"));
+    assertTrue(image.contains("existing.union(merged)"));
     assertFalse(image.contains("private Dirty dirty;"));
     assertTrue(mesh.contains("StagingMemory.allocate"));
     assertTrue(mesh.contains("vertexBytes"));
@@ -168,10 +169,10 @@ class StabilitySourceTest {
   @Test
   void fixedRenderStateIsMirroredIntoBgfxInsteadOfUsingOneHardCodedState() throws IOException {
     String glState = read("mixin/GlStateManagerMixin.java");
-    String bridge = read("bridge/Bridge.java");
+    String bridge = read("bridge/Bridge.java") + read("bridge/DrawContextFactory.java");
     String color = read("graphics/pipeline/ColorPipeline.java");
     String texture = read("graphics/pipeline/TexturePipeline.java");
-    String scene = read("debug/Scene.java");
+    String scene = read("debug/Scene.java") + read("debug/NativeOverlayRenderer.java");
     assertTrue(glState.contains("_enableDepthTest()V"));
     assertTrue(glState.contains("_depthFunc(I)V"));
     assertTrue(glState.contains("_depthMask(Z)V"));
@@ -187,7 +188,7 @@ class StabilitySourceTest {
     assertTrue(glState.contains("_polygonMode(II)V"));
     assertTrue(glState.contains("_enableColorLogicOp()V"));
     assertTrue(glState.contains("_logicOp(I)V"));
-    assertTrue(bridge.contains("renderState.snapshot(framebufferWidth, framebufferHeight)"));
+    assertTrue(bridge.contains("renderState.snapshot(width, height)"));
     assertTrue(color.contains("bgfx_set_state(state.bgfxState(), 0)"));
     assertTrue(texture.contains("bgfx_set_state(state.bgfxState(), 0)"));
     assertTrue(color.contains("bgfx_set_scissor"));
@@ -196,7 +197,8 @@ class StabilitySourceTest {
     assertFalse(texture.contains("ColorPipeline.State.DEFAULT"));
     assertTrue(scene.contains("Raw OpenGL draw escapes detected"));
     assertTrue(scene.contains("Fully clipped draws skipped before GPU submit"));
-    String state = read("bridge/state/RenderState.java");
+    String state =
+        read("bridge/state/RenderState.java") + read("bridge/state/BgfxStateEncoder.java");
     assertTrue(state.contains("if (depthTest)"));
     assertTrue(state.contains("if (depthWrite) state |= WRITE_Z"));
     assertTrue(state.contains("return rgb | (rgb << 3)"));
@@ -224,7 +226,11 @@ class StabilitySourceTest {
     String batch = read("bridge/mesh/Batch.java");
     String layout = read("graphics/bgfx/Layout.java");
     String packing = read("graphics/bgfx/Packing.java");
-    String bridge = read("bridge/Bridge.java");
+    String bridge =
+        read("bridge/Bridge.java")
+            + read("bridge/DrawContextFactory.java")
+            + read("bridge/DrawContext.java")
+            + read("bridge/mesh/MeshStore.java");
     String pipeline = read("graphics/pipeline/LightmapTexturePipeline.java");
     assertTrue(encoder.contains("VertexFormatElement.UV1"));
     assertTrue(encoder.contains("VertexFormatElement.UV2"));
@@ -243,20 +249,26 @@ class StabilitySourceTest {
   @Test
   void nativeDrawHotPathReusesScratchObjectsAndDisablesDiagnosticOverlayByDefault()
       throws IOException {
-    String bridge = read("bridge/Bridge.java");
-    String state = read("bridge/state/RenderState.java");
+    String bridge =
+        read("bridge/Bridge.java")
+            + read("bridge/DrawContextFactory.java")
+            + read("bridge/DrawContext.java")
+            + read("bridge/mesh/MeshStore.java");
+    String state =
+        read("bridge/state/RenderState.java") + read("bridge/state/BgfxStateEncoder.java");
     String config = read("config/Config.java");
-    String scene = read("debug/Scene.java");
+    String scene = read("debug/Scene.java") + read("debug/NativeOverlayRenderer.java");
     assertTrue(bridge.contains("mvpScratch.set(projection).mul(modelView)"));
-    assertTrue(bridge.contains("private final DrawContext drawContext = new DrawContext()"));
-    assertTrue(bridge.contains("ResidentMesh resident = residentMeshes.get(slot)"));
-    assertTrue(bridge.contains("resident.touch(bytes, frameBoundary)"));
+    assertTrue(bridge.contains("private final DrawContext context = new DrawContext()"));
+    assertTrue(bridge.contains("ResidentMesh resident = residents.get(slot)"));
+    assertTrue(bridge.contains("resident.lastUsedFrame = frameBoundary"));
     assertFalse(bridge.contains("new Matrix4f(projection)"));
     assertFalse(bridge.contains("return new DrawContext("));
-    assertFalse(bridge.contains("residentMeshes.put(slot, new ResidentMesh(slot.mesh().bytes()"));
-    assertTrue(state.contains("cachedStandard.revision() == revision"));
-    assertTrue(state.contains("cachedImmediate.revision() == revision"));
-    assertTrue(state.contains("cachedSky.revision() == revision"));
+    assertFalse(bridge.contains("residents.put(slot, new ResidentMesh(slot.mesh().bytes()"));
+    assertTrue(state.contains("cachedStandard"));
+    assertTrue(state.contains("cachedImmediate"));
+    assertTrue(state.contains("cachedSky"));
+    assertTrue(state.contains("snapshot.revision() == revision"));
     assertTrue(config.contains("System.getProperty(\"dx12mc.overlay\", \"false\")"));
     assertTrue(config.contains("System.getProperty(\"dx12mc.vsync\", \"false\")"));
     assertTrue(scene.contains("dx12mc.overlay.refreshMillis"));
@@ -272,7 +284,7 @@ class StabilitySourceTest {
     String level = read("mixin/LevelRendererMixin.java");
     String vertexBuffer = read("mixin/VertexBufferMixin.java");
     String runtime = read("client/Runtime.java");
-    String controller = read("render/Controller.java");
+    String controller = read("render/Controller.java") + read("render/SectionRenderContext.java");
     String mixins = Files.readString(Path.of("src", "main", "resources", "dx12mc.mixins.json"));
     assertTrue(level.contains("renderSectionLayer"));
     assertTrue(level.contains("Uniform;set(FFF)V"));
@@ -282,10 +294,10 @@ class StabilitySourceTest {
     assertTrue(vertexBuffer.contains("method = \"draw()V\""));
     assertTrue(vertexBuffer.contains("drawSection(dx12mc$slot())"));
     assertTrue(runtime.contains("drawSection(Slot slot)"));
-    assertTrue(controller.contains("sectionDrawModelView"));
-    assertTrue(controller.contains(".set(sectionModelView)"));
-    assertFalse(controller.contains("new Matrix4f(sectionModelView)"));
-    assertTrue(controller.contains("translate(sectionOffsetX, sectionOffsetY, sectionOffsetZ)"));
+    assertTrue(controller.contains("drawModelView"));
+    assertTrue(controller.contains(".set(modelView)"));
+    assertFalse(controller.contains("new Matrix4f(modelView)"));
+    assertTrue(controller.contains("translate(offsetX, offsetY, offsetZ)"));
     assertTrue(mixins.contains("LevelRendererMixin"));
   }
 
@@ -295,7 +307,7 @@ class StabilitySourceTest {
     String runtime = read("client/Runtime.java");
     String controller = read("render/Controller.java");
     String glState = read("mixin/GlStateManagerMixin.java");
-    String scene = read("debug/Scene.java");
+    String scene = read("debug/Scene.java") + read("debug/NativeOverlayRenderer.java");
     assertTrue(gameRenderer.contains("tryTakeScreenshotIfNeeded()V"));
     assertTrue(gameRenderer.contains("suppressAutomaticWorldIconCapture()"));
     assertTrue(gameRenderer.contains("ci.cancel()"));
@@ -310,10 +322,11 @@ class StabilitySourceTest {
 
   @Test
   void worldVisibilityKeepsSpecialImmediateBlendAndLinesDoNotCrashWorldEntry() throws IOException {
-    String state = read("bridge/state/RenderState.java");
+    String state =
+        read("bridge/state/RenderState.java") + read("bridge/state/BgfxStateEncoder.java");
     String bridge = read("bridge/Bridge.java");
     String stats = read("bridge/Stats.java");
-    String scene = read("debug/Scene.java");
+    String scene = read("debug/Scene.java") + read("debug/NativeOverlayRenderer.java");
     assertTrue(state.contains("if (blend)"));
     assertTrue(state.contains("blendBits(srcRgb, dstRgb, srcAlpha, dstAlpha)"));
     assertTrue(state.contains("IMMEDIATE_COMPAT_ALPHA_BLEND"));
@@ -325,7 +338,11 @@ class StabilitySourceTest {
   }
 
   private static String read(String relative) throws IOException {
-    return Files.readString(JAVA.resolve(relative));
+    String source = Files.readString(JAVA.resolve(relative));
+    if (relative.equals("render/Controller.java")) {
+      return source + Files.readString(JAVA.resolve("render/RendererLifecycle.java"));
+    }
+    return source;
   }
 
   @org.junit.jupiter.api.Test
@@ -334,6 +351,9 @@ class StabilitySourceTest {
     String bridge =
         java.nio.file.Files.readString(
             java.nio.file.Path.of("src/main/java/net/dx12mc/bridge/Bridge.java"));
+    String meshStore =
+        java.nio.file.Files.readString(
+            java.nio.file.Path.of("src/main/java/net/dx12mc/bridge/mesh/MeshStore.java"));
     String batch =
         java.nio.file.Files.readString(
             java.nio.file.Path.of("src/main/java/net/dx12mc/bridge/mesh/Batch.java"));
@@ -346,15 +366,13 @@ class StabilitySourceTest {
     String mesh =
         java.nio.file.Files.readString(
             java.nio.file.Path.of("src/main/java/net/dx12mc/graphics/bgfx/Mesh.java"));
-    org.junit.jupiter.api.Assertions.assertTrue(bridge.contains("MAX_RESIDENT_STATIC_MESHES"));
-    org.junit.jupiter.api.Assertions.assertTrue(bridge.contains("MAX_RESIDENT_STATIC_BYTES"));
-    org.junit.jupiter.api.Assertions.assertTrue(bridge.contains("residentMeshBytes"));
-    org.junit.jupiter.api.Assertions.assertTrue(bridge.contains("ensureResidentCapacity"));
-    org.junit.jupiter.api.Assertions.assertTrue(bridge.contains("staticAllocationBackoff"));
+    org.junit.jupiter.api.Assertions.assertTrue(meshStore.contains("MAX_RESIDENT_STATIC_MESHES"));
+    org.junit.jupiter.api.Assertions.assertTrue(meshStore.contains("MAX_RESIDENT_STATIC_BYTES"));
+    org.junit.jupiter.api.Assertions.assertTrue(meshStore.contains("residentBytes"));
+    org.junit.jupiter.api.Assertions.assertTrue(meshStore.contains("ensureCapacity"));
+    org.junit.jupiter.api.Assertions.assertTrue(meshStore.contains("allocationBackoff"));
     org.junit.jupiter.api.Assertions.assertTrue(
-        bridge.contains("lastUsedFrame() < frameBoundary - 1L"));
-    org.junit.jupiter.api.Assertions.assertTrue(
-        bridge.contains("lastUsedFrame() < frameBoundary - 1L"));
+        meshStore.contains("lastUsedFrame < frameBoundary - 1L"));
     org.junit.jupiter.api.Assertions.assertTrue(bridge.contains("nativeStreamingSpill"));
     org.junit.jupiter.api.Assertions.assertTrue(bridge.contains("deferredSectionDraw"));
     org.junit.jupiter.api.Assertions.assertFalse(bridge.contains("emergencyEvict"));
@@ -369,7 +387,7 @@ class StabilitySourceTest {
     org.junit.jupiter.api.Assertions.assertTrue(gl.contains("_glBufferData(IJI)V"));
     org.junit.jupiter.api.Assertions.assertTrue(
         gl.contains("suppressLegacyVertexBufferStorage(target"));
-    org.junit.jupiter.api.Assertions.assertTrue(bridge.contains("MAX_RESIDENT_STATIC_BYTES"));
+    org.junit.jupiter.api.Assertions.assertTrue(meshStore.contains("MAX_RESIDENT_STATIC_BYTES"));
   }
 
   @org.junit.jupiter.api.Test
@@ -378,6 +396,9 @@ class StabilitySourceTest {
     String bridge =
         java.nio.file.Files.readString(
             java.nio.file.Path.of("src/main/java/net/dx12mc/bridge/Bridge.java"));
+    String meshStore =
+        java.nio.file.Files.readString(
+            java.nio.file.Path.of("src/main/java/net/dx12mc/bridge/mesh/MeshStore.java"));
     String encoder =
         java.nio.file.Files.readString(
             java.nio.file.Path.of("src/main/java/net/dx12mc/bridge/mesh/Encoder.java"));
@@ -390,16 +411,18 @@ class StabilitySourceTest {
     org.junit.jupiter.api.Assertions.assertTrue(encoder.contains("decodeIndexUpdate"));
     org.junit.jupiter.api.Assertions.assertTrue(encoder.contains("remaining == shortBytes"));
     org.junit.jupiter.api.Assertions.assertTrue(encoder.contains("remaining == intBytes"));
-    org.junit.jupiter.api.Assertions.assertTrue(bridge.contains("staleSortedIndexUpdate"));
-    org.junit.jupiter.api.Assertions.assertTrue(bridge.contains("gpu.updateIndices(slot.batch())"));
-    org.junit.jupiter.api.Assertions.assertTrue(bridge.contains("syncResidentIndices"));
+    org.junit.jupiter.api.Assertions.assertTrue(meshStore.contains("staleSortedIndexUpdate"));
     org.junit.jupiter.api.Assertions.assertTrue(
-        bridge.contains("catch (StagingBackpressureException pressure)"));
-    org.junit.jupiter.api.Assertions.assertTrue(bridge.contains("stats.deferredGpuIndexUpdate()"));
+        meshStore.contains("gpu.updateIndices(slot.batch())"));
+    org.junit.jupiter.api.Assertions.assertTrue(meshStore.contains("syncIndices"));
+    org.junit.jupiter.api.Assertions.assertTrue(
+        meshStore.contains("catch (StagingBackpressureException pressure)"));
+    org.junit.jupiter.api.Assertions.assertTrue(
+        meshStore.contains("stats.deferredGpuIndexUpdate()"));
     org.junit.jupiter.api.Assertions.assertTrue(slot.contains("indicesDirty"));
     org.junit.jupiter.api.Assertions.assertTrue(slot.contains("indicesUploaded"));
     org.junit.jupiter.api.Assertions.assertFalse(
-        bridge.contains(
+        meshStore.contains(
             "public void updateIndices(Slot slot, ByteBuffer source) {\n"
                 + "        forgetResident(slot);"));
     org.junit.jupiter.api.Assertions.assertTrue(
@@ -423,11 +446,14 @@ class StabilitySourceTest {
             java.nio.file.Path.of("src/main/java/net/dx12mc/mixin/LevelRendererMixin.java"));
     String state =
         java.nio.file.Files.readString(
-            java.nio.file.Path.of("src/main/java/net/dx12mc/bridge/state/RenderState.java"));
+                java.nio.file.Path.of("src/main/java/net/dx12mc/bridge/state/RenderState.java"))
+            + java.nio.file.Files.readString(
+                java.nio.file.Path.of(
+                    "src/main/java/net/dx12mc/bridge/state/BgfxStateEncoder.java"));
     org.junit.jupiter.api.Assertions.assertTrue(
         mixin.contains(
             "renderSky(Lorg/joml/Matrix4f;Lorg/joml/Matrix4f;FLnet/minecraft/client/Camera;ZLjava/lang/Runnable;)V"));
     org.junit.jupiter.api.Assertions.assertTrue(state.contains("skyCompatibilitySnapshot"));
-    org.junit.jupiter.api.Assertions.assertTrue(state.contains("long state = MSAA"));
+    org.junit.jupiter.api.Assertions.assertTrue(state.contains("static long sky("));
   }
 }

@@ -43,11 +43,15 @@ The project prefers semantic Minecraft hooks over raw OpenGL interception. Low-l
 
 The bridge is responsible for converting Minecraft render inputs into data the backend can submit:
 
-- `bridge.mesh` encodes vertex and index data into compact CPU-side batches.
-- `bridge.texture` tracks image revisions and uploads texture regions progressively.
+- `bridge.mesh` encodes vertex and index data into compact CPU-side batches; `MeshStore` owns CPU captures and bounded GPU residency.
+- `bridge.texture` tracks image revisions and uploads texture regions progressively. `MipLevel` owns pixel/dirty-region state, while `TextureEntry` owns CPU-to-GPU synchronization.
 - `bridge.shader` maps supported vertex formats and render types to shader families.
-- `bridge.state` stores the render state needed by bgfx submissions.
-- `Bridge` coordinates frame lifecycle, residency, defers, and draw submission.
+- `bridge.state` tracks Minecraft render state separately from the bgfx bit encoder and scissor conversion.
+- `DrawContextFactory` resolves per-draw matrices, shader semantics, textures, and state without allocating on the steady-state path.
+- `graphics.pipeline.PipelineSet` owns pipeline resources and routes draws to the color, texture, or lightmap pipeline.
+- `Bridge` is the native-rendering facade and coordinates draw submission across these components.
+
+The Minecraft-facing `Controller` remains the stable integration API. `RendererLifecycle` owns backend initialization, frame and present boundaries, fatal state, and shutdown; `SectionRenderContext` owns the reusable transforms for compiled section layers.
 
 The bridge keeps CPU mirrors for data that Minecraft may update asynchronously, such as sorted translucent indices or dirty texture regions. This lets DX12MC retry native work across frame boundaries without depending on stale OpenGL buffers.
 
@@ -87,4 +91,4 @@ These limitations are tracked in source and tests so missing coverage is visible
 
 ## Tests
 
-Tests cover small bridge components, encoding rules, shader source contracts, and selected source-level stability checks. They are intended to catch regressions in the current architecture, not to prove full Minecraft renderer compatibility.
+Tests cover small bridge components, encoding rules, shader source contracts, and selected source-level stability checks. Source checks follow responsibilities across extracted components instead of assuming every invariant lives in one large facade. They are intended to catch regressions in the current architecture, not to prove full Minecraft renderer compatibility.

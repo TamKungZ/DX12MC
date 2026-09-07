@@ -4,6 +4,7 @@ Note: 0.8.8 is the first version intended to initialize git history. Earlier ver
 
 ## 0.8.10 - Frame pacing diagnostics
 
+- Split renderer lifecycle, section transforms, draw-context resolution, pipeline ownership, mesh residency, texture GPU synchronization, mip dirty tracking, state encoding, and overlay formatting into cohesive components while preserving the existing Minecraft-facing APIs and render behavior.
 - Disabled VSync by default so missed refresh deadlines do not quantize performance into large FPS steps. It remains available with `-Ddx12mc.vsync=true`.
 - Limited the optional native diagnostic overlay to four refreshes per second instead of rebuilding more than 50 lines every rendered frame. Configure the interval with `dx12mc.overlay.refreshMillis`.
 - Added prior-frame bgfx CPU, GPU, submit-wait, render-wait, native draw-count, static/transient submission, and JVM garbage-collection timing to the diagnostic overlay.
