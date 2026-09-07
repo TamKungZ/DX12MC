@@ -268,8 +268,8 @@ dependencies {
     include("org.lwjgl:lwjgl-bgfx:$lwjglVersion")
     runtimeOnly("org.lwjgl:lwjgl-bgfx:$lwjglVersion:natives-windows")
     bgfxWindowsNatives("org.lwjgl:lwjgl-bgfx:$lwjglVersion:natives-windows")
-    javaFormatter("com.google.googlejavaformat:google-java-format:1.25.2")
-    testImplementation(platform("org.junit:junit-bom:5.11.4"))
+    javaFormatter("com.google.googlejavaformat:google-java-format:1.36.1")
+    testImplementation(platform("org.junit:junit-bom:6.1.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
 }
 
