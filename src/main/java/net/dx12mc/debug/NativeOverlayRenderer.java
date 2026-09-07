@@ -2,7 +2,6 @@ package net.dx12mc.debug;
 
 import net.dx12mc.bridge.Stats;
 
-/** Formats strict-native bridge diagnostics without owning refresh or JVM sampling state. */
 final class NativeOverlayRenderer {
   void render(
       OverlayWriter writer,

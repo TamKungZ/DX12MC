@@ -1,6 +1,5 @@
 package net.dx12mc.bridge.state;
 
-/** Tracks Minecraft's fixed-function state and caches translated bgfx snapshots. */
 public final class RenderState {
   private static final int GL_POINT = 0x1B00;
   private static final int GL_LINE = 0x1B01;

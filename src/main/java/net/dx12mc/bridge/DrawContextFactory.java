@@ -10,7 +10,6 @@ import net.dx12mc.bridge.texture.Registry;
 import net.dx12mc.graphics.bgfx.Texture;
 import org.joml.Matrix4f;
 
-/** Resolves matrices, shader semantics, textures, and fixed-function state for a draw. */
 final class DrawContextFactory {
   private final Registry textures;
   private final RenderState renderState = new RenderState();

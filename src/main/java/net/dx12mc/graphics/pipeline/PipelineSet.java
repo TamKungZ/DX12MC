@@ -5,7 +5,6 @@ import net.dx12mc.bridge.mesh.Batch;
 import net.dx12mc.graphics.bgfx.Layout;
 import net.dx12mc.graphics.bgfx.Mesh;
 
-/** Owns the native vertex layout and selects the matching shader pipeline for each draw. */
 public final class PipelineSet implements AutoCloseable {
   private Layout layout;
   private ColorPipeline color;

@@ -2,7 +2,6 @@ package net.dx12mc.render;
 
 import org.joml.Matrix4f;
 
-/** Holds the model-view state used while Minecraft submits one compiled section layer. */
 final class SectionRenderContext {
   private final Matrix4f modelView = new Matrix4f();
   private final Matrix4f projection = new Matrix4f();

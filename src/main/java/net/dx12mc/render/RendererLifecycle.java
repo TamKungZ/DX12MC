@@ -13,7 +13,6 @@ import net.dx12mc.graphics.bgfx.ProbeResult;
 import net.dx12mc.platform.win32.WindowHandle;
 import net.minecraft.client.Minecraft;
 
-/** Owns renderer initialization, frame boundaries, failure state, and native shutdown. */
 final class RendererLifecycle implements AutoCloseable {
   private final Config config;
   private final Bridge bridge;

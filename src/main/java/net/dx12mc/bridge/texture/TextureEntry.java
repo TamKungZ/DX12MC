@@ -6,7 +6,6 @@ import net.dx12mc.graphics.bgfx.StagingBackpressureException;
 import net.dx12mc.graphics.bgfx.StagingMemory;
 import net.dx12mc.graphics.bgfx.Texture;
 
-/** Synchronizes one CPU texture mirror with its lazily-created GPU texture. */
 final class TextureEntry implements AutoCloseable {
   private static final int MAX_UPLOAD_CHUNK_BYTES =
       (int)

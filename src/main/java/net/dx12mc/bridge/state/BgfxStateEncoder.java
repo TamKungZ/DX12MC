@@ -1,6 +1,5 @@
 package net.dx12mc.bridge.state;
 
-/** Translates tracked OpenGL fixed-function values into bgfx render-state bits. */
 final class BgfxStateEncoder {
   static final int GL_ZERO = 0;
   static final int GL_ONE = 1;

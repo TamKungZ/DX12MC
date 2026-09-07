@@ -2,7 +2,6 @@ package net.dx12mc.debug;
 
 import net.dx12mc.graphics.bgfx.DebugText;
 
-/** Cursor-based writer for the fixed-width bgfx debug overlay. */
 final class OverlayWriter {
   private final DebugText text;
   private int row = 1;

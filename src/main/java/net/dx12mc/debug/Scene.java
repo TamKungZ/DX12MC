@@ -8,7 +8,6 @@ import net.dx12mc.graphics.FrameSize;
 import net.dx12mc.graphics.bgfx.Backend;
 import net.dx12mc.graphics.bgfx.DebugText;
 
-/** Coordinates refresh pacing and the two diagnostic overlay modes. */
 public final class Scene {
   private static final long OVERLAY_REFRESH_NANOS =
       Math.max(50L, Long.getLong("dx12mc.overlay.refreshMillis", 250L)) * 1_000_000L;

@@ -16,7 +16,6 @@ import net.dx12mc.graphics.bgfx.Mesh;
 import net.dx12mc.graphics.bgfx.StagingBackpressureException;
 import org.lwjgl.bgfx.BGFXVertexLayout;
 
-/** Owns captured CPU meshes and the bounded LRU of persistent GPU meshes. */
 public final class MeshStore implements AutoCloseable {
   private static final int MAX_RESIDENT_STATIC_MESHES =
       Math.max(256, Integer.getInteger("dx12mc.mesh.cache.max", 4096));

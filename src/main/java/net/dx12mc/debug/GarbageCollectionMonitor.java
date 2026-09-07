@@ -4,7 +4,6 @@ import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.util.List;
 
-/** Samples JVM collection counters and reports deltas between overlay refreshes. */
 final class GarbageCollectionMonitor {
   private final List<GarbageCollectorMXBean> collectors =
       ManagementFactory.getGarbageCollectorMXBeans();

@@ -5,9 +5,6 @@ import java.nio.ByteOrder;
 import net.dx12mc.bridge.mesh.Batch;
 
 public final class Packing {
-  // Only attributes consumed by the active D3D12 shaders are staged. UV1 and
-  // normals remain in the CPU Batch for future shader families, but expanding
-  // unused values to floats made every section vertex 62.5% larger than vanilla.
   public static final int VERTEX_STRIDE = 32;
 
   private Packing() {}

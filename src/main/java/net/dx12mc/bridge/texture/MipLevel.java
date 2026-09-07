@@ -3,7 +3,6 @@ package net.dx12mc.bridge.texture;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Owns the pixels and dirty-region tracking for one texture mip level. */
 final class MipLevel {
   private static final int MAX_DIRTY_REGIONS = 64;
 

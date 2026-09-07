@@ -3,7 +3,6 @@ package net.dx12mc.bridge;
 import net.dx12mc.bridge.state.RenderState;
 import net.dx12mc.graphics.bgfx.Texture;
 
-/** Reusable per-draw binding description; mutable to avoid hot-path allocations. */
 public final class DrawContext {
   private boolean textured;
   private Texture texture;
