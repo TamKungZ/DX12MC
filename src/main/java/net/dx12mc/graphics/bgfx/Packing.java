@@ -5,7 +5,10 @@ import java.nio.ByteOrder;
 import net.dx12mc.bridge.mesh.Batch;
 
 public final class Packing {
-  public static final int VERTEX_STRIDE = 52;
+  // Only attributes consumed by the active D3D12 shaders are staged. UV1 and
+  // normals remain in the CPU Batch for future shader families, but expanding
+  // unused values to floats made every section vertex 62.5% larger than vanilla.
+  public static final int VERTEX_STRIDE = 32;
 
   private Packing() {}
 
@@ -32,9 +35,7 @@ public final class Packing {
     float[] positions = batch.positions();
     int[] colors = batch.colors();
     float[] uv0 = batch.uv0();
-    short[] uv1 = batch.uv1();
     short[] uv2 = batch.uv2();
-    byte[] normals = batch.normals();
     for (int vertex = 0; vertex < batch.vertexCount(); vertex++) {
       int p = vertex * 3;
       int uv = vertex * 2;
@@ -49,13 +50,8 @@ public final class Packing {
       target.put(dst + 15, (byte) rgba);
       target.putFloat(dst + 16, batch.hasUv0() ? uv0[uv] : 0.0f);
       target.putFloat(dst + 20, batch.hasUv0() ? uv0[uv + 1] : 0.0f);
-      target.putFloat(dst + 24, batch.hasUv1() ? Short.toUnsignedInt(uv1[uv]) : 0.0f);
-      target.putFloat(dst + 28, batch.hasUv1() ? Short.toUnsignedInt(uv1[uv + 1]) : 0.0f);
-      target.putFloat(dst + 32, batch.hasUv2() ? Short.toUnsignedInt(uv2[uv]) : 0.0f);
-      target.putFloat(dst + 36, batch.hasUv2() ? Short.toUnsignedInt(uv2[uv + 1]) : 0.0f);
-      target.putFloat(dst + 40, batch.hasNormal() ? snorm8(normals[p]) : 0.0f);
-      target.putFloat(dst + 44, batch.hasNormal() ? snorm8(normals[p + 1]) : 0.0f);
-      target.putFloat(dst + 48, batch.hasNormal() ? snorm8(normals[p + 2]) : 0.0f);
+      target.putFloat(dst + 24, batch.hasUv2() ? Short.toUnsignedInt(uv2[uv]) : 0.0f);
+      target.putFloat(dst + 28, batch.hasUv2() ? Short.toUnsignedInt(uv2[uv + 1]) : 0.0f);
     }
   }
 
@@ -65,9 +61,5 @@ public final class Packing {
       for (int i = 0; i < source.length; i++) target.putInt(i * Integer.BYTES, source[i]);
     else
       for (int i = 0; i < source.length; i++) target.putShort(i * Short.BYTES, (short) source[i]);
-  }
-
-  private static float snorm8(byte value) {
-    return Math.max(-1.0f, value / 127.0f);
   }
 }

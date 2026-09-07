@@ -13,9 +13,7 @@ public final class Layout implements AutoCloseable {
     bgfx_vertex_layout_add(value, BGFX_ATTRIB_POSITION, 3, BGFX_ATTRIB_TYPE_FLOAT, false, false);
     bgfx_vertex_layout_add(value, BGFX_ATTRIB_COLOR0, 4, BGFX_ATTRIB_TYPE_UINT8, true, false);
     bgfx_vertex_layout_add(value, BGFX_ATTRIB_TEXCOORD0, 2, BGFX_ATTRIB_TYPE_FLOAT, false, false);
-    bgfx_vertex_layout_add(value, BGFX_ATTRIB_TEXCOORD1, 2, BGFX_ATTRIB_TYPE_FLOAT, false, false);
     bgfx_vertex_layout_add(value, BGFX_ATTRIB_TEXCOORD2, 2, BGFX_ATTRIB_TYPE_FLOAT, false, false);
-    bgfx_vertex_layout_add(value, BGFX_ATTRIB_NORMAL, 3, BGFX_ATTRIB_TYPE_FLOAT, false, false);
     bgfx_vertex_layout_end(value);
   }
 

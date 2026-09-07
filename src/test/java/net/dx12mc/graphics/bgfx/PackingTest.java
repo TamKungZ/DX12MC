@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 class PackingTest {
 
   @Test
-  void packsExtendedMinecraftVertexIntoFiftyTwoBytes() {
+  void packsOnlyShaderConsumedAttributesIntoThirtyTwoBytes() {
     Batch batch =
         new Batch(
             new float[] {1.0f, 2.0f, 3.0f},
@@ -29,7 +29,7 @@ class PackingTest {
             VertexFormat.Mode.TRIANGLES);
     ByteBuffer out = ByteBuffer.allocate(Packing.VERTEX_STRIDE).order(ByteOrder.nativeOrder());
     Packing.vertices(out, batch);
-    assertEquals(52, Packing.VERTEX_STRIDE);
+    assertEquals(32, Packing.VERTEX_STRIDE);
     assertEquals(1.0f, out.getFloat(0));
     assertEquals(2.0f, out.getFloat(4));
     assertEquals(3.0f, out.getFloat(8));
@@ -39,13 +39,8 @@ class PackingTest {
     assertEquals(0x44, Byte.toUnsignedInt(out.get(15)));
     assertEquals(0.25f, out.getFloat(16));
     assertEquals(0.75f, out.getFloat(20));
-    assertEquals(7.0f, out.getFloat(24));
-    assertEquals(9.0f, out.getFloat(28));
-    assertEquals(240.0f, out.getFloat(32));
-    assertEquals(128.0f, out.getFloat(36));
-    assertEquals(0.0f, out.getFloat(40));
-    assertEquals(1.0f, out.getFloat(44));
-    assertEquals(-1.0f, out.getFloat(48));
+    assertEquals(240.0f, out.getFloat(24));
+    assertEquals(128.0f, out.getFloat(28));
   }
 
   @Test
@@ -68,7 +63,7 @@ class PackingTest {
     ByteBuffer out = ByteBuffer.allocate(Packing.VERTEX_STRIDE).order(ByteOrder.nativeOrder());
     Packing.vertices(out, batch);
     assertEquals(28L, batch.cpuBytes());
-    for (int offset = 16; offset < 52; offset += 4) assertEquals(0.0f, out.getFloat(offset));
+    for (int offset = 16; offset < 32; offset += 4) assertEquals(0.0f, out.getFloat(offset));
   }
 
   @Test
