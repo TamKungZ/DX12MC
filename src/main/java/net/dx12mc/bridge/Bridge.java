@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import net.dx12mc.bridge.mesh.Batch;
 import net.dx12mc.bridge.mesh.Encoder;
@@ -43,7 +44,15 @@ public final class Bridge implements AutoCloseable {
   private final float[] matrix = new float[16];
   private final float[] textureMatrix = new float[16];
   private final float[] tint = new float[4];
+  private final Matrix4f mvpScratch = new Matrix4f();
+  private final Matrix4f clipScratch = new Matrix4f();
+  private final DrawContext drawContext = new DrawContext();
+  private String classifiedShaderName;
+  private ShaderFamily classifiedShaderFamily = ShaderFamily.BASIC;
+  private boolean classifiedShaderCutout;
   private String semanticIntent = "frame";
+  private boolean sectionIntent;
+  private boolean skyIntent;
   private Layout layout;
   private ColorPipeline color;
   private TexturePipeline texture;
@@ -128,6 +137,8 @@ public final class Bridge implements AutoCloseable {
 
   public void semanticIntent(String intent) {
     this.semanticIntent = intent == null || intent.isBlank() ? "frame" : intent;
+    this.sectionIntent = semanticIntent.startsWith("level.section-layer");
+    this.skyIntent = semanticIntent.startsWith("level.sky");
   }
 
   public void bindTexture(int id) {
@@ -280,7 +291,7 @@ public final class Bridge implements AutoCloseable {
     try {
       context = context(batch, modelView, projection, framebufferWidth, framebufferHeight);
     } catch (StagingBackpressureException pressure) {
-      if (semanticIntent.startsWith("level.section-layer")) stats.deferredSectionDraw();
+      if (sectionIntent) stats.deferredSectionDraw();
       return true;
     }
     if (context.state().scissorEmpty()) {
@@ -297,7 +308,7 @@ public final class Bridge implements AutoCloseable {
         if (staticAllocationBackoff) {
           stats.nativeStreamingSpill();
           success = submitTransient(batch, context);
-          if (!success && semanticIntent.startsWith("level.section-layer")) {
+          if (!success && sectionIntent) {
             stats.deferredSectionDraw();
             return true;
           }
@@ -319,7 +330,7 @@ public final class Bridge implements AutoCloseable {
           staticAllocationBackoff = true;
           stats.nativeStreamingSpill();
           success = submitTransient(batch, context);
-          if (!success && semanticIntent.startsWith("level.section-layer")) {
+          if (!success && sectionIntent) {
             stats.deferredSectionDraw();
             return true;
           }
@@ -347,7 +358,7 @@ public final class Bridge implements AutoCloseable {
           stats.residentMeshRetry();
           stats.nativeStreamingSpill();
           success = submitTransient(batch, context);
-          if (!success && semanticIntent.startsWith("level.section-layer")) {
+          if (!success && sectionIntent) {
             stats.deferredSectionDraw();
             return true;
           }
@@ -493,21 +504,21 @@ public final class Bridge implements AutoCloseable {
       Matrix4f projection,
       int framebufferWidth,
       int framebufferHeight) {
-    Matrix4f mvp = new Matrix4f(projection).mul(modelView);
-    new Matrix4f().identity().m22(0.5f).m32(0.5f).mul(mvp).get(matrix);
+    prepareMatrix(modelView, projection);
     RenderSystem.getTextureMatrix().get(textureMatrix);
     float[] shaderColor = RenderSystem.getShaderColor();
     System.arraycopy(shaderColor, 0, tint, 0, tint.length);
     String shader = shaderName();
-    ShaderFamily family = ShaderFamily.classify(shader);
+    classifyShader(shader);
+    ShaderFamily family = classifiedShaderFamily;
     Texture sampled = resolveBaseTexture(batch, shader);
     Texture lightmap = resolveLightmap(batch, family);
     RenderState.Snapshot state =
-        semanticIntent.startsWith("level.sky")
+        skyIntent
             ? renderState.skyCompatibilitySnapshot(framebufferWidth, framebufferHeight)
             : renderState.snapshot(framebufferWidth, framebufferHeight);
-    return new DrawContext(
-        batch.hasUv0(), sampled, lightmap != null, lightmap, family, isCutoutShader(shader), state);
+    return drawContext.set(
+        batch.hasUv0(), sampled, lightmap != null, lightmap, classifiedShaderCutout, state);
   }
 
   private DrawContext contextImmediate(
@@ -516,20 +527,30 @@ public final class Bridge implements AutoCloseable {
       Matrix4f projection,
       int framebufferWidth,
       int framebufferHeight) {
-    Matrix4f mvp = new Matrix4f(projection).mul(modelView);
-    new Matrix4f().identity().m22(0.5f).m32(0.5f).mul(mvp).get(matrix);
+    prepareMatrix(modelView, projection);
     RenderSystem.getTextureMatrix().get(textureMatrix);
     float[] shaderColor = RenderSystem.getShaderColor();
     System.arraycopy(shaderColor, 0, tint, 0, tint.length);
     String shader = shaderName();
-    ShaderFamily family = ShaderFamily.classify(shader);
+    classifyShader(shader);
     Texture sampled = resolveBaseTexture(batch, shader);
     RenderState.Snapshot state =
-        semanticIntent.startsWith("level.sky")
+        skyIntent
             ? renderState.skyCompatibilitySnapshot(framebufferWidth, framebufferHeight)
             : renderState.immediateCompatibilitySnapshot(framebufferWidth, framebufferHeight);
-    return new DrawContext(
-        batch.hasUv0(), sampled, false, null, family, isCutoutShader(shader), state);
+    return drawContext.set(batch.hasUv0(), sampled, false, null, classifiedShaderCutout, state);
+  }
+
+  private void prepareMatrix(Matrix4f modelView, Matrix4f projection) {
+    mvpScratch.set(projection).mul(modelView);
+    clipScratch.identity().m22(0.5f).m32(0.5f).mul(mvpScratch).get(matrix);
+  }
+
+  private void classifyShader(String shader) {
+    if (Objects.equals(classifiedShaderName, shader)) return;
+    classifiedShaderName = shader;
+    classifiedShaderFamily = ShaderFamily.classify(shader);
+    classifiedShaderCutout = isCutoutShader(shader);
   }
 
   private Texture resolveBaseTexture(Batch batch, String shader) {
@@ -590,10 +611,15 @@ public final class Bridge implements AutoCloseable {
 
   private void touchResident(Slot slot) {
     if (slot == null || slot.mesh() == null || !slot.mesh().valid()) return;
-    ResidentMesh previous =
-        residentMeshes.put(slot, new ResidentMesh(slot.mesh().bytes(), frameBoundary));
-    if (previous == null) residentMeshBytes += slot.mesh().bytes();
-    else residentMeshBytes += slot.mesh().bytes() - previous.bytes();
+    long bytes = slot.mesh().bytes();
+    ResidentMesh resident = residentMeshes.get(slot);
+    if (resident == null) {
+      residentMeshes.put(slot, new ResidentMesh(bytes, frameBoundary));
+      residentMeshBytes += bytes;
+    } else {
+      residentMeshBytes += bytes - resident.bytes();
+      resident.touch(bytes, frameBoundary);
+    }
     stats.residentMeshes(residentMeshes.size(), residentMeshBytes);
   }
 
@@ -700,14 +726,75 @@ public final class Bridge implements AutoCloseable {
     return new UnsupportedRenderPathException(message);
   }
 
-  private record DrawContext(
-      boolean textured,
-      Texture texture,
-      boolean lightmapped,
-      Texture lightmap,
-      ShaderFamily family,
-      boolean cutout,
-      RenderState.Snapshot state) {}
+  private static final class DrawContext {
+    private boolean textured;
+    private Texture texture;
+    private boolean lightmapped;
+    private Texture lightmap;
+    private boolean cutout;
+    private RenderState.Snapshot state;
 
-  private record ResidentMesh(long bytes, long lastUsedFrame) {}
+    private DrawContext set(
+        boolean textured,
+        Texture texture,
+        boolean lightmapped,
+        Texture lightmap,
+        boolean cutout,
+        RenderState.Snapshot state) {
+      this.textured = textured;
+      this.texture = texture;
+      this.lightmapped = lightmapped;
+      this.lightmap = lightmap;
+      this.cutout = cutout;
+      this.state = state;
+      return this;
+    }
+
+    private boolean textured() {
+      return textured;
+    }
+
+    private Texture texture() {
+      return texture;
+    }
+
+    private boolean lightmapped() {
+      return lightmapped;
+    }
+
+    private Texture lightmap() {
+      return lightmap;
+    }
+
+    private boolean cutout() {
+      return cutout;
+    }
+
+    private RenderState.Snapshot state() {
+      return state;
+    }
+  }
+
+  private static final class ResidentMesh {
+    private long bytes;
+    private long lastUsedFrame;
+
+    private ResidentMesh(long bytes, long lastUsedFrame) {
+      this.bytes = bytes;
+      this.lastUsedFrame = lastUsedFrame;
+    }
+
+    private long bytes() {
+      return bytes;
+    }
+
+    private long lastUsedFrame() {
+      return lastUsedFrame;
+    }
+
+    private void touch(long bytes, long lastUsedFrame) {
+      this.bytes = bytes;
+      this.lastUsedFrame = lastUsedFrame;
+    }
+  }
 }

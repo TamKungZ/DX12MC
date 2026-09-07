@@ -7,6 +7,26 @@ import org.junit.jupiter.api.Test;
 class RenderStateTest {
 
   @Test
+  void snapshotsAreReusedUntilStateOrFramebufferChanges() {
+    RenderState state = new RenderState();
+
+    RenderState.Snapshot standard = state.snapshot(1920, 1080);
+    assertSame(standard, state.snapshot(1920, 1080));
+    assertNotSame(standard, state.snapshot(1280, 720));
+
+    RenderState.Snapshot immediate = state.immediateCompatibilitySnapshot(1280, 720);
+    assertSame(immediate, state.immediateCompatibilitySnapshot(1280, 720));
+
+    RenderState.Snapshot sky = state.skyCompatibilitySnapshot(1280, 720);
+    assertSame(sky, state.skyCompatibilitySnapshot(1280, 720));
+
+    state.blend(true);
+    assertNotSame(standard, state.snapshot(1920, 1080));
+    assertNotSame(immediate, state.immediateCompatibilitySnapshot(1280, 720));
+    assertNotSame(sky, state.skyCompatibilitySnapshot(1280, 720));
+  }
+
+  @Test
   void disabledDepthTestDoesNotWriteDepthEvenWhenDepthMaskIsTrue() {
     RenderState state = new RenderState();
     state.depthTest(false);

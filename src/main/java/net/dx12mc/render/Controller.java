@@ -30,8 +30,11 @@ public final class Controller implements AutoCloseable {
   private boolean frameOpen;
   private FatalRenderException failure;
   private boolean sectionLayerActive;
-  private Matrix4f sectionModelView;
-  private Matrix4f sectionProjection;
+  private final Matrix4f sectionModelView = new Matrix4f();
+  private final Matrix4f sectionProjection = new Matrix4f();
+  private final Matrix4f sectionDrawModelView = new Matrix4f();
+  private FrameSize currentFrameSize = new FrameSize(1, 1);
+  private boolean sectionMatricesValid;
   private float sectionOffsetX, sectionOffsetY, sectionOffsetZ;
   private String semanticIntent = "frame";
   private int legacyVertexBufferUploadDepth;
@@ -278,8 +281,9 @@ public final class Controller implements AutoCloseable {
     if (modelView == null || projection == null) {
       throw fatal("Minecraft section-layer draw supplied null matrices.", null);
     }
-    this.sectionModelView = new Matrix4f(modelView);
-    this.sectionProjection = new Matrix4f(projection);
+    this.sectionModelView.set(modelView);
+    this.sectionProjection.set(projection);
+    this.sectionMatricesValid = true;
     this.sectionOffsetX = this.sectionOffsetY = this.sectionOffsetZ = 0.0f;
     this.sectionLayerActive = true;
     this.semanticIntent = "level.section-layer";
@@ -296,20 +300,20 @@ public final class Controller implements AutoCloseable {
   public boolean drawSection(Slot slot) {
     if (!config.nativeMode() || !sectionLayerActive) return false;
     throwIfFailed();
-    if (sectionModelView == null || sectionProjection == null) {
+    if (!sectionMatricesValid) {
       throw fatal("D3D12 section-layer context is incomplete.", null);
     }
-    Matrix4f modelView =
-        new Matrix4f(sectionModelView).translate(sectionOffsetX, sectionOffsetY, sectionOffsetZ);
-    boolean submitted = draw(slot, modelView, sectionProjection);
+    sectionDrawModelView
+        .set(sectionModelView)
+        .translate(sectionOffsetX, sectionOffsetY, sectionOffsetZ);
+    boolean submitted = draw(slot, sectionDrawModelView, sectionProjection);
     if (submitted) stats.sectionLayerDraw();
     return submitted;
   }
 
   public void endSectionLayer() {
     this.sectionLayerActive = false;
-    this.sectionModelView = null;
-    this.sectionProjection = null;
+    this.sectionMatricesValid = false;
     this.sectionOffsetX = this.sectionOffsetY = this.sectionOffsetZ = 0.0f;
     this.semanticIntent = "frame";
     if (bridge != null) bridge.semanticIntent(this.semanticIntent);
@@ -357,7 +361,9 @@ public final class Controller implements AutoCloseable {
       ensureFrame(minecraft);
       if (!frameOpen) throw new IllegalStateException("D3D12 frame was not opened before present");
       FrameSize size = frameSize(minecraft.getWindow());
-      debug.render(backend, size, config.mode(), stats.snapshot(), config.overlay());
+      if (debug.shouldRender(config.mode(), config.overlay())) {
+        debug.render(backend, size, config.mode(), stats.snapshot(), config.overlay());
+      }
       backend.endFrame();
       frameOpen = false;
       if (bridge != null) bridge.onFrameBoundary();
@@ -438,6 +444,8 @@ public final class Controller implements AutoCloseable {
     if (state == State.CLOSED) return;
     state = State.CLOSED;
     frameOpen = false;
+    sectionLayerActive = false;
+    sectionMatricesValid = false;
     legacyVertexBufferUploadDepth = 0;
     closeBridge();
     backend.close();
@@ -535,6 +543,8 @@ public final class Controller implements AutoCloseable {
     if (failure != null) return failure;
     state = State.FAILED;
     frameOpen = false;
+    sectionLayerActive = false;
+    sectionMatricesValid = false;
     legacyVertexBufferUploadDepth = 0;
     String full =
         "DX12MC STRICT D3D12 ERROR: "
@@ -560,8 +570,13 @@ public final class Controller implements AutoCloseable {
     }
   }
 
-  private static FrameSize frameSize(Window window) {
-    return new FrameSize(window.getWidth(), window.getHeight());
+  private FrameSize frameSize(Window window) {
+    int width = Math.max(1, window.getWidth());
+    int height = Math.max(1, window.getHeight());
+    if (currentFrameSize.width() != width || currentFrameSize.height() != height) {
+      currentFrameSize = new FrameSize(width, height);
+    }
+    return currentFrameSize;
   }
 
   private enum State {

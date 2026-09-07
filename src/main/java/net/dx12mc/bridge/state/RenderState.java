@@ -81,6 +81,12 @@ public final class RenderState {
   private boolean colorLogic;
   private int logicOp = 0x1503;
   private long revision;
+  private Snapshot cachedStandard;
+  private Snapshot cachedImmediate;
+  private Snapshot cachedSky;
+  private int cachedStandardWidth, cachedStandardHeight;
+  private int cachedImmediateWidth, cachedImmediateHeight;
+  private int cachedSkyWidth, cachedSkyHeight;
 
   public void depthTest(boolean enabled) {
     if (depthTest != enabled) {
@@ -207,6 +213,10 @@ public final class RenderState {
 
   public Snapshot snapshot(int framebufferWidth, int framebufferHeight) {
     validateUnsupportedState();
+    if (cachedStandard != null
+        && cachedStandard.revision() == revision
+        && cachedStandardWidth == framebufferWidth
+        && cachedStandardHeight == framebufferHeight) return cachedStandard;
     long state = MSAA;
     if (writeR) state |= WRITE_R;
     if (writeG) state |= WRITE_G;
@@ -219,23 +229,31 @@ public final class RenderState {
     if (blend) state |= blendBits(srcRgb, dstRgb, srcAlpha, dstAlpha) | equationBits(blendEquation);
     if (cull) state |= CULL_CW;
     ScissorRect rect = clippedScissor(framebufferWidth, framebufferHeight);
-    return new Snapshot(
-        state,
-        scissor,
-        scissor && rect.empty(),
-        rect.x(),
-        rect.y(),
-        rect.width(),
-        rect.height(),
-        revision,
-        depthTest,
-        depthWrite,
-        blend,
-        cull);
+    cachedStandardWidth = framebufferWidth;
+    cachedStandardHeight = framebufferHeight;
+    cachedStandard =
+        new Snapshot(
+            state,
+            scissor,
+            scissor && rect.empty(),
+            rect.x(),
+            rect.y(),
+            rect.width(),
+            rect.height(),
+            revision,
+            depthTest,
+            depthWrite,
+            blend,
+            cull);
+    return cachedStandard;
   }
 
   public Snapshot immediateCompatibilitySnapshot(int framebufferWidth, int framebufferHeight) {
     validateUnsupportedState();
+    if (cachedImmediate != null
+        && cachedImmediate.revision() == revision
+        && cachedImmediateWidth == framebufferWidth
+        && cachedImmediateHeight == framebufferHeight) return cachedImmediate;
     ScissorRect rect = clippedScissor(framebufferWidth, framebufferHeight);
     long state = IMMEDIATE_COMPAT_BASE;
     if (blend) {
@@ -243,23 +261,31 @@ public final class RenderState {
     } else {
       state |= IMMEDIATE_COMPAT_ALPHA_BLEND;
     }
-    return new Snapshot(
-        state,
-        scissor,
-        scissor && rect.empty(),
-        rect.x(),
-        rect.y(),
-        rect.width(),
-        rect.height(),
-        revision,
-        true,
-        true,
-        true,
-        false);
+    cachedImmediateWidth = framebufferWidth;
+    cachedImmediateHeight = framebufferHeight;
+    cachedImmediate =
+        new Snapshot(
+            state,
+            scissor,
+            scissor && rect.empty(),
+            rect.x(),
+            rect.y(),
+            rect.width(),
+            rect.height(),
+            revision,
+            true,
+            true,
+            true,
+            false);
+    return cachedImmediate;
   }
 
   public Snapshot skyCompatibilitySnapshot(int framebufferWidth, int framebufferHeight) {
     validateUnsupportedState();
+    if (cachedSky != null
+        && cachedSky.revision() == revision
+        && cachedSkyWidth == framebufferWidth
+        && cachedSkyHeight == framebufferHeight) return cachedSky;
     ScissorRect rect = clippedScissor(framebufferWidth, framebufferHeight);
     long state = MSAA;
     if (writeR) state |= WRITE_R;
@@ -267,19 +293,23 @@ public final class RenderState {
     if (writeB) state |= WRITE_B;
     if (writeA) state |= WRITE_A;
     if (blend) state |= blendBits(srcRgb, dstRgb, srcAlpha, dstAlpha) | equationBits(blendEquation);
-    return new Snapshot(
-        state,
-        scissor,
-        scissor && rect.empty(),
-        rect.x(),
-        rect.y(),
-        rect.width(),
-        rect.height(),
-        revision,
-        false,
-        false,
-        blend,
-        false);
+    cachedSkyWidth = framebufferWidth;
+    cachedSkyHeight = framebufferHeight;
+    cachedSky =
+        new Snapshot(
+            state,
+            scissor,
+            scissor && rect.empty(),
+            rect.x(),
+            rect.y(),
+            rect.width(),
+            rect.height(),
+            revision,
+            false,
+            false,
+            blend,
+            false);
+    return cachedSky;
   }
 
   private void validateUnsupportedState() {
