@@ -1,83 +1,88 @@
-# DX12MC renderer architecture
+# Architecture
 
-DX12MC treats Minecraft rendering intent as the primary integration surface and raw OpenGL calls as a last-line assertion surface.
+DX12MC is a client-side Fabric mod that redirects selected Minecraft Java rendering work to a Direct3D 12 backend through bgfx. It does this by intercepting specific Minecraft rendering points, translating the data DX12MC supports, and rejecting paths that would silently fall back to OpenGL rendering.
 
-```text
-Minecraft 1.21.1 semantic render points
-  GameRenderer / LevelRenderer / BufferUploader / VertexBuffer
-                     |
-                     v
-              DX12MC Runtime
-                     |
-                     v
-          backend-neutral bridge state
-        mesh / texture / state / scopes
-                     |
-                     v
-                   bgfx
-                     |
-                     v
-             Direct3D 12 / DXGI
-```
+This document is a source-level overview for contributors. It is not a complete renderer specification.
 
-## Integration rules
-
-1. Prefer a high-level Minecraft choke point when the operation has semantic meaning.
-2. Translate visible drawing to D3D12 and cancel the matching vanilla draw.
-3. Keep OpenGL bootstrap/resource bookkeeping only while Minecraft still requires it.
-4. Never use OpenGL as a rendering or presentation fallback in native mode.
-5. `GlStateManager` hooks mirror unavoidable fixed state and guard unknown raw draw/readback escapes. They are not the target renderer.
-6. Non-visible legacy features that require stale OpenGL framebuffer contents may be skipped at their semantic source until a native equivalent exists. The current example is automatic singleplayer world-icon capture.
-
-## Current semantic scopes
-
-- `LevelRenderer.renderSectionLayer` -> compiled terrain/section geometry, chunk offset, matrices.
-- `GameRenderer.processBlurEffect` -> legacy menu blur is omitted until native render-target/post-processing support exists.
-- `GameRenderer.tryTakeScreenshotIfNeeded` -> automatic world-icon capture is omitted until native D3D12 readback exists.
-- `BufferUploader` -> immediate GUI/entity/render-type mesh submission.
-- `VertexBuffer` -> persistent mesh submission and scoped section-layer direct draws.
-
-Unknown raw OpenGL draw/readback calls remain fatal so missing semantic coverage is visible instead of silently producing hybrid rendering.
-
-
-## Immediate overlay compatibility
-The generic immediate pipeline intentionally combines the proven GUI depth/cull profile with live explicit blend factors. This preserves menu stability while allowing semantic in-world blend modes such as the vignette multiply pass. Unsupported `rendertype_lines` is omitted at the high-level MeshData choke point until a native D3D12 thick-line shader exists; low-level OpenGL remains forbidden.
-
-
-## Geometry memory ownership (0.8.5)
-
-After native takeover, a Minecraft `VertexBuffer` keeps its Java/GL identity only as lifecycle compatibility. DX12MC owns the visible geometry contents:
+## Runtime Shape
 
 ```text
-Minecraft MeshData upload
+Minecraft client
+  GameRenderer / LevelRenderer / BufferUploader / VertexBuffer / texture upload points
         |
-        +--> compact DX12MC CPU mirror (short UV1/UV2, byte normal)
+        v
+Fabric mixins
         |
-        +--> bounded persistent bgfx/D3D12 mesh when resident
-        |          or
-        +--> native transient D3D12 stream under static-resource pressure
-
-legacy OpenGL vertex VBO data store: suppressed after takeover
-legacy OpenGL EBO/index storage: preserved (vanilla maps shared AutoStorageIndexBuffer)
-OpenGL draw/present fallback:     forbidden
+        v
+DX12MC bridge
+  mesh, texture, shader, render state, frame statistics
+        |
+        v
+bgfx
+        |
+        v
+Direct3D 12
 ```
 
-Persistent residency is bounded by both count and estimated GPU bytes. A static-allocation failure puts new section allocation into a one-frame backoff so bgfx can retire deferred destroys at `endFrame`; it does not trigger a destroy/recreate storm. If both static allocation and the per-frame transient ring are temporarily unavailable, section rendering is deferred for one frame and retried natively; no OpenGL path is enabled.
+The main boundary is the bridge layer under `net.dx12mc.bridge`. Minecraft-facing mixins collect data from known render paths, then pass normalized batches, textures, state, and frame events into the bridge. The lower bgfx wrapper under `net.dx12mc.graphics.bgfx` owns the native handles and staging memory used to submit work to bgfx.
 
+## Integration Points
 
-## 0.8.6 sorted section indices
+DX12MC hooks Minecraft at a small number of render and resource choke points:
 
-Minecraft may rebuild a section while a queued translucent-quad sort result is still waiting to upload. DX12MC treats the captured CPU batch as authoritative. A valid sort updates only the resident dynamic D3D12 index buffer; a stale QUADS sort keeps the previous valid native order. Non-quad invalid index updates remain strict errors. This prevents asynchronous sort lifetime from becoming a GL fallback or a full section-mesh rebuild loop.
+- `GameRenderer` for frame-level behavior and selected legacy effects.
+- `LevelRenderer` for section layer rendering.
+- `BufferUploader` for immediate mesh submissions.
+- `VertexBuffer` for persistent mesh uploads and draws.
+- `NativeImage`, `TextureUtil`, and texture-related calls for image upload data.
+- `GlStateManager`, `RenderSystem`, and `RenderTarget` where Minecraft still expects GL-shaped lifecycle or state calls.
 
+The project prefers semantic Minecraft hooks over raw OpenGL interception. Low-level GL hooks are kept narrow: they mirror state DX12MC needs or stop unsupported raw rendering from being hidden.
 
-## 0.8.7 native staging ownership
+## Bridge Responsibilities
 
-Large upload payloads are no longer allocated by `bgfx_alloc`. DX12MC allocates bounded native blocks, transfers them with `bgfx_make_ref_release`, and frees them only from bgfx's release callback. This keeps upload memory explicitly bounded and turns short allocation pressure into a recoverable native backpressure signal.
+The bridge is responsible for converting Minecraft render inputs into data the backend can submit:
 
-Texture dirties are tracked as sparse regions rather than a single union rectangle. Existing GPU textures may render their last valid D3D12 revision for a frame while a pending native upload waits for staging capacity. If a required texture has no native revision yet, the affected draw itself is deferred for one frame and retried after the bgfx frame boundary. Both are native-only temporal defers, never GL fallbacks.
+- `bridge.mesh` encodes vertex and index data into compact CPU-side batches.
+- `bridge.texture` tracks image revisions and uploads texture regions progressively.
+- `bridge.shader` maps supported vertex formats and render types to shader families.
+- `bridge.state` stores the render state needed by bgfx submissions.
+- `Bridge` coordinates frame lifecycle, residency, defers, and draw submission.
 
-## 0.8.8 forward progress and stable residency
+The bridge keeps CPU mirrors for data that Minecraft may update asynchronously, such as sorted translucent indices or dirty texture regions. This lets DX12MC retry native work across frame boundaries without depending on stale OpenGL buffers.
 
-Texture staging is progressive: each initial mip or dirty region is divided into bounded row bands, and its cursor advances only after bgfx accepts that band. Backpressure preserves the partial native texture and resumes the unsubmitted suffix after a frame boundary. Dirty snapshots are detached from newly arriving CPU changes, so successful prefixes are never uploaded repeatedly and later revisions remain pending.
+## Backend Responsibilities
 
-Sorted index updates are similarly coalesced in the CPU mirror and staged only when their section is visible. Pressure keeps the last valid resident index order instead of retiring the mesh. Resident meshes touched in the preceding frame are not eligible for demand eviction; an oversized visible working set uses bounded native transient streaming rather than cyclic LRU reconstruction.
+The bgfx layer wraps the native resources used by the bridge:
+
+- buffers and meshes;
+- textures;
+- shader programs;
+- transient and reference-counted staging memory;
+- backend probing and debug text.
+
+Large uploads use bounded native staging. If bgfx cannot accept more data in the current frame, DX12MC records the pending work and resumes later instead of allocating without limit.
+
+## Resource Ownership
+
+After DX12MC takes over a supported path, visible rendering data is owned by DX12MC's CPU mirrors and bgfx resources. Minecraft objects may still exist because vanilla code expects their lifecycle, but they are not treated as the source of visible native rendering once the data has entered the bridge.
+
+Persistent section meshes are kept resident while capacity allows. Under pressure, DX12MC can defer a draw for a later frame or use bounded transient streaming for visible work. Recently used resident meshes are protected from immediate eviction to avoid rebuild loops.
+
+Texture uploads are tracked by revision. Initial uploads and dirty regions are split into row bands, so a large texture can make forward progress over multiple frames. If a texture has a previous valid native revision, DX12MC may keep drawing that revision while newer regions wait for staging capacity. If no native revision exists yet, the affected draw is deferred.
+
+## Unsupported Paths
+
+DX12MC does not try to make every Minecraft render path work by mixing native D3D12 output with OpenGL output. Unsupported visible paths are expected to fail loudly or be skipped at a known semantic hook until a native implementation exists.
+
+Examples of intentionally limited behavior:
+
+- legacy menu blur is omitted until native render-target or post-processing support exists;
+- automatic singleplayer world-icon capture is omitted until native readback exists;
+- unsupported thick-line rendering is skipped at the mesh choke point.
+
+These limitations are tracked in source and tests so missing coverage is visible during development.
+
+## Tests
+
+Tests cover small bridge components, encoding rules, shader source contracts, and selected source-level stability checks. They are intended to catch regressions in the current architecture, not to prove full Minecraft renderer compatibility.
