@@ -12,7 +12,7 @@ public final class Image {
   private int width;
   private int height;
   private int maxLevel;
-  private Level[] levels;
+  private MipLevel[] levels;
   private long revision;
   private boolean blur;
   private boolean clamp;
@@ -23,9 +23,9 @@ public final class Image {
     this.width = width;
     this.height = height;
     this.maxLevel = Math.min(Math.max(0, maxLevel), maximumMipLevel(width, height));
-    this.levels = new Level[this.maxLevel + 1];
+    this.levels = new MipLevel[this.maxLevel + 1];
     for (int level = 0; level <= this.maxLevel; level++) {
-      levels[level] = new Level(computedLevelWidth(level), computedLevelHeight(level));
+      levels[level] = new MipLevel(computedLevelWidth(level), computedLevelHeight(level));
     }
   }
 
@@ -48,15 +48,15 @@ public final class Image {
         || offsetY < 0
         || skipPixels < 0
         || skipRows < 0) return false;
-    Level target = levels[level];
-    if ((long) offsetX + uploadWidth > target.width
-        || (long) offsetY + uploadHeight > target.height) return false;
+    MipLevel target = levels[level];
+    if ((long) offsetX + uploadWidth > target.width()
+        || (long) offsetY + uploadHeight > target.height()) return false;
     if ((long) skipPixels + uploadWidth > source.getWidth()
         || (long) skipRows + uploadHeight > source.getHeight()) return false;
     byte[] rgba = target.ensurePixels();
     for (int y = 0; y < uploadHeight; y++) {
       for (int x = 0; x < uploadWidth; x++) {
-        int dst = ((offsetY + y) * target.width + offsetX + x) * 4;
+        int dst = ((offsetY + y) * target.width() + offsetX + x) * 4;
         Pixels.writeNativeImageAsRgba(source, skipPixels + x, skipRows + y, rgba, dst);
       }
     }
@@ -82,20 +82,20 @@ public final class Image {
               + MAX_BYTES_PER_TEXTURE
               + " (override with -Ddx12mc.texture.maxBytes=...)");
     }
-    Level[] resized = new Level[levels.length];
+    MipLevel[] resized = new MipLevel[levels.length];
     for (int level = 0; level < levels.length; level++) {
-      Level old = levels[level];
-      Level next = new Level(Math.max(1, newWidth >> level), Math.max(1, newHeight >> level));
-      if (old.pixels != null) {
-        next.pixels = new byte[checkedBytes(next.width, next.height)];
-        int copyWidth = Math.min(old.width, next.width);
-        int copyHeight = Math.min(old.height, next.height);
+      MipLevel old = levels[level];
+      MipLevel next = new MipLevel(Math.max(1, newWidth >> level), Math.max(1, newHeight >> level));
+      if (old.hasPixels()) {
+        next.pixels(new byte[checkedBytes(next.width(), next.height())]);
+        int copyWidth = Math.min(old.width(), next.width());
+        int copyHeight = Math.min(old.height(), next.height());
         int rowBytes = Math.multiplyExact(copyWidth, 4);
         for (int row = 0; row < copyHeight; row++) {
           System.arraycopy(
-              old.pixels, row * old.width * 4, next.pixels, row * next.width * 4, rowBytes);
+              old.pixels(), row * old.width() * 4, next.pixels(), row * next.width() * 4, rowBytes);
         }
-        next.dirty.addAll(old.dirty);
+        next.copyDirtyRegionsFrom(old);
       }
       resized[level] = next;
     }
@@ -121,7 +121,7 @@ public final class Image {
     validateBaseSize(newWidth, newHeight);
     long total = 0;
     for (int level = 0; level < levels.length; level++) {
-      if (levels[level].pixels == null) continue;
+      if (!levels[level].hasPixels()) continue;
       long levelBytes =
           (long) Math.max(1, newWidth >> level) * Math.max(1, newHeight >> level) * 4L;
       total = Math.addExact(total, levelBytes);
@@ -138,20 +138,20 @@ public final class Image {
   }
 
   public byte[] copyRegion(int level, int x, int y, int regionWidth, int regionHeight) {
-    Level source = level(level);
+    MipLevel source = level(level);
     if (x < 0
         || y < 0
         || regionWidth <= 0
         || regionHeight <= 0
-        || (long) x + regionWidth > source.width
-        || (long) y + regionHeight > source.height) {
+        || (long) x + regionWidth > source.width()
+        || (long) y + regionHeight > source.height()) {
       throw new IllegalArgumentException("invalid texture region");
     }
     byte[] pixels = source.ensurePixels();
     byte[] region = new byte[checkedBytes(regionWidth, regionHeight)];
     int rowBytes = Math.multiplyExact(regionWidth, 4);
     for (int row = 0; row < regionHeight; row++) {
-      int src = ((y + row) * source.width + x) * 4;
+      int src = ((y + row) * source.width() + x) * 4;
       int dst = row * rowBytes;
       System.arraycopy(pixels, src, region, dst, rowBytes);
     }
@@ -161,9 +161,9 @@ public final class Image {
   public List<Upload> fullUploads() {
     List<Upload> uploads = new ArrayList<>();
     for (int level = 0; level <= maxLevel; level++) {
-      Level source = levels[level];
+      MipLevel source = levels[level];
       if (!source.hasPixels()) continue;
-      uploads.add(new Upload(level, 0, 0, source.width, source.height, source.pixels));
+      uploads.add(new Upload(level, 0, 0, source.width(), source.height(), source.pixels()));
     }
     return uploads;
   }
@@ -171,38 +171,38 @@ public final class Image {
   public List<Upload> dirtyUploads() {
     List<Upload> uploads = new ArrayList<>();
     for (int level = 0; level <= maxLevel; level++) {
-      Level source = levels[level];
-      if (source.dirty.isEmpty() || !source.hasPixels()) continue;
-      for (Dirty dirty : source.dirty) {
+      MipLevel source = levels[level];
+      if (source.dirtyRegions().isEmpty() || !source.hasPixels()) continue;
+      for (MipLevel.DirtyRegion dirty : source.dirtyRegions()) {
         uploads.add(
             new Upload(
                 level,
-                dirty.minX,
-                dirty.minY,
-                dirty.maxX - dirty.minX,
-                dirty.maxY - dirty.minY,
+                dirty.minX(),
+                dirty.minY(),
+                dirty.maxX() - dirty.minX(),
+                dirty.maxY() - dirty.minY(),
                 copyRegion(
                     level,
-                    dirty.minX,
-                    dirty.minY,
-                    dirty.maxX - dirty.minX,
-                    dirty.maxY - dirty.minY)));
+                    dirty.minX(),
+                    dirty.minY(),
+                    dirty.maxX() - dirty.minX(),
+                    dirty.maxY() - dirty.minY())));
       }
     }
     return uploads;
   }
 
   public void clearDirty() {
-    for (Level level : levels) level.dirty.clear();
+    for (MipLevel level : levels) level.clearDirty();
   }
 
   public boolean ensureMaxLevel(int requestedMaxLevel) {
     int target = Math.min(Math.max(0, requestedMaxLevel), maximumMipLevel(width, height));
     if (target <= maxLevel) return false;
-    Level[] expanded = new Level[target + 1];
+    MipLevel[] expanded = new MipLevel[target + 1];
     System.arraycopy(levels, 0, expanded, 0, levels.length);
     for (int level = levels.length; level < expanded.length; level++) {
-      expanded[level] = new Level(Math.max(1, width >> level), Math.max(1, height >> level));
+      expanded[level] = new MipLevel(Math.max(1, width >> level), Math.max(1, height >> level));
     }
     levels = expanded;
     maxLevel = target;
@@ -212,8 +212,8 @@ public final class Image {
   public long additionalBytesForUpload(int level) {
     if (level < 0) throw new IllegalArgumentException("invalid mip level: " + level);
     ensureMaxLevel(level);
-    Level target = levels[level];
-    long additional = target.pixels == null ? (long) target.width * target.height * 4L : 0L;
+    MipLevel target = levels[level];
+    long additional = target.hasPixels() ? 0L : (long) target.width() * target.height() * 4L;
     long total = allocatedCpuBytes() + additional;
     if (total > MAX_BYTES_PER_TEXTURE) {
       throw new IllegalArgumentException(
@@ -242,7 +242,7 @@ public final class Image {
 
   public boolean hasCompleteMipChain() {
     if (maxLevel == 0) return false;
-    for (Level level : levels) if (!level.hasPixels()) return false;
+    for (MipLevel level : levels) if (!level.hasPixels()) return false;
     return true;
   }
 
@@ -259,11 +259,11 @@ public final class Image {
   }
 
   public int levelWidth(int level) {
-    return level(level).width;
+    return level(level).width();
   }
 
   public int levelHeight(int level) {
-    return level(level).height;
+    return level(level).height();
   }
 
   public long revision() {
@@ -284,11 +284,11 @@ public final class Image {
 
   public long allocatedCpuBytes() {
     long total = 0;
-    for (Level level : levels) if (level.pixels != null) total += level.pixels.length;
+    for (MipLevel level : levels) if (level.hasPixels()) total += level.pixels().length;
     return total;
   }
 
-  private Level level(int level) {
+  private MipLevel level(int level) {
     if (level < 0 || level > maxLevel)
       throw new IllegalArgumentException("invalid mip level: " + level);
     return levels[level];
@@ -331,7 +331,7 @@ public final class Image {
     }
   }
 
-  private static int checkedBytes(int width, int height) {
+  static int checkedBytes(int width, int height) {
     long bytes = (long) width * height * 4L;
     if (bytes <= 0 || bytes > Integer.MAX_VALUE || bytes > MAX_BYTES_PER_TEXTURE) {
       throw new IllegalArgumentException(
@@ -341,60 +341,4 @@ public final class Image {
   }
 
   public record Upload(int level, int x, int y, int width, int height, byte[] rgba) {}
-
-  private static final class Level {
-    private final int width;
-    private final int height;
-    private static final int MAX_DIRTY_REGIONS = 64;
-    private byte[] pixels;
-    private final List<Dirty> dirty = new ArrayList<>();
-
-    private Level(int width, int height) {
-      this.width = width;
-      this.height = height;
-    }
-
-    private boolean hasPixels() {
-      return pixels != null;
-    }
-
-    private byte[] ensurePixels() {
-      if (pixels == null) pixels = new byte[checkedBytes(width, height)];
-      return pixels;
-    }
-
-    private void markDirty(int x, int y, int width, int height) {
-      Dirty merged = new Dirty(x, y, x + width, y + height);
-      for (int i = dirty.size() - 1; i >= 0; i--) {
-        Dirty existing = dirty.get(i);
-        if (!touches(existing, merged)) continue;
-        merged = union(existing, merged);
-        dirty.remove(i);
-      }
-      dirty.add(merged);
-      if (dirty.size() > MAX_DIRTY_REGIONS) {
-        Dirty all = dirty.get(0);
-        for (int i = 1; i < dirty.size(); i++) all = union(all, dirty.get(i));
-        dirty.clear();
-        dirty.add(all);
-      }
-    }
-
-    private static boolean touches(Dirty a, Dirty b) {
-      return a.minX <= b.maxX + 1
-          && a.maxX + 1 >= b.minX
-          && a.minY <= b.maxY + 1
-          && a.maxY + 1 >= b.minY;
-    }
-
-    private static Dirty union(Dirty a, Dirty b) {
-      return new Dirty(
-          Math.min(a.minX, b.minX),
-          Math.min(a.minY, b.minY),
-          Math.max(a.maxX, b.maxX),
-          Math.max(a.maxY, b.maxY));
-    }
-  }
-
-  private record Dirty(int minX, int minY, int maxX, int maxY) {}
 }
