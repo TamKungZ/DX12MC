@@ -80,4 +80,29 @@ class PackingTest {
     assertEquals(1, Short.toUnsignedInt(out.getShort(2)));
     assertEquals(65535, Short.toUnsignedInt(out.getShort(4)));
   }
+
+  @Test
+  void ignoresUnusedCapacityInReusableBatches() {
+    Batch batch =
+        new Batch(
+            new float[12],
+            new int[4],
+            new float[0],
+            false,
+            new short[0],
+            false,
+            new short[0],
+            false,
+            new byte[0],
+            false,
+            new int[] {0, 0, 0, 65536, 65536, 65536},
+            3,
+            1,
+            VertexFormat.Mode.TRIANGLES);
+    ByteBuffer out = ByteBuffer.allocate(Packing.indexBytes(batch)).order(ByteOrder.nativeOrder());
+    Packing.indices(out, batch.indices(), batch.indexCount(), Packing.index32(batch));
+    assertEquals(6, Packing.indexBytes(batch));
+    assertEquals(28L, batch.cpuBytes());
+    assertEquals(0, Short.toUnsignedInt(out.getShort(4)));
+  }
 }
