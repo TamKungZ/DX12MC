@@ -360,6 +360,12 @@ public final class Controller implements AutoCloseable {
     return true;
   }
 
+  public boolean suppressManualScreenshotCapture() {
+    if (config.probeMode()) return false;
+    throwIfFailed();
+    return lifecycle.active();
+  }
+
   public void assertOpenGlDrawAllowed(String operation) {
     if (lifecycle.openGlGuardAllowed()) return;
     throwIfFailed();
