@@ -65,6 +65,10 @@ public final class Runtime implements AutoCloseable {
     return controller.drawSection(slot);
   }
 
+  public boolean suppressLegacySectionDriverCalls() {
+    return controller.suppressLegacySectionDriverCalls();
+  }
+
   public void endSectionLayer() {
     controller.endSectionLayer();
   }
