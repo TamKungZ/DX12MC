@@ -15,6 +15,8 @@ import org.lwjgl.bgfx.BGFXTransientVertexBuffer;
 import org.lwjgl.system.MemoryStack;
 
 public final class LightmapTexturePipeline implements AutoCloseable {
+  private static final int SECTION_GEOMETRY_DISCARD =
+      BGFX_DISCARD_INDEX_BUFFER | BGFX_DISCARD_VERTEX_STREAMS;
   private static final String VS = "/assets/dx12mc/shaders/d3d12/vs_position_color_tex_light.bin";
   private static final String FS = "/assets/dx12mc/shaders/d3d12/fs_position_color_tex_light.bin";
   private static final String FS_CUTOUT =
@@ -56,6 +58,33 @@ public final class LightmapTexturePipeline implements AutoCloseable {
       float[] color,
       RenderState.Snapshot state,
       boolean cutout) {
+    return submit(mesh, texture, lightmap, mvp, texMatrix, color, state, cutout, false, false);
+  }
+
+  public boolean submitSection(
+      Mesh mesh,
+      Texture texture,
+      Texture lightmap,
+      float[] mvp,
+      float[] texMatrix,
+      float[] color,
+      RenderState.Snapshot state,
+      boolean cutout,
+      boolean reuseState) {
+    return submit(mesh, texture, lightmap, mvp, texMatrix, color, state, cutout, reuseState, true);
+  }
+
+  private boolean submit(
+      Mesh mesh,
+      Texture texture,
+      Texture lightmap,
+      float[] mvp,
+      float[] texMatrix,
+      float[] color,
+      RenderState.Snapshot state,
+      boolean cutout,
+      boolean reuseState,
+      boolean preserveSectionState) {
     if (state.scissorEmpty()) return true;
     if (mesh == null
         || !mesh.valid()
@@ -64,7 +93,8 @@ public final class LightmapTexturePipeline implements AutoCloseable {
         || lightmap == null
         || !lightmap.valid()) return false;
     mesh.bind();
-    return submitState(texture, lightmap, mvp, texMatrix, color, state, cutout);
+    return submitState(
+        texture, lightmap, mvp, texMatrix, color, state, cutout, reuseState, preserveSectionState);
   }
 
   public boolean submit(
@@ -76,6 +106,33 @@ public final class LightmapTexturePipeline implements AutoCloseable {
       float[] color,
       RenderState.Snapshot state,
       boolean cutout) {
+    return submit(batch, texture, lightmap, mvp, texMatrix, color, state, cutout, false, false);
+  }
+
+  public boolean submitSection(
+      Batch batch,
+      Texture texture,
+      Texture lightmap,
+      float[] mvp,
+      float[] texMatrix,
+      float[] color,
+      RenderState.Snapshot state,
+      boolean cutout,
+      boolean reuseState) {
+    return submit(batch, texture, lightmap, mvp, texMatrix, color, state, cutout, reuseState, true);
+  }
+
+  private boolean submit(
+      Batch batch,
+      Texture texture,
+      Texture lightmap,
+      float[] mvp,
+      float[] texMatrix,
+      float[] color,
+      RenderState.Snapshot state,
+      boolean cutout,
+      boolean reuseState,
+      boolean preserveSectionState) {
     if (state.scissorEmpty()) return true;
     if (texture == null || !texture.valid() || lightmap == null || !lightmap.valid()) return false;
     boolean index32 = Packing.index32(batch);
@@ -83,13 +140,22 @@ public final class LightmapTexturePipeline implements AutoCloseable {
       BGFXTransientVertexBuffer vertices = BGFXTransientVertexBuffer.calloc(stack);
       BGFXTransientIndexBuffer indices = BGFXTransientIndexBuffer.calloc(stack);
       if (!bgfx_alloc_transient_buffers(
-          vertices, layout.value(), batch.vertexCount(), indices, batch.indices().length, index32))
+          vertices, layout.value(), batch.vertexCount(), indices, batch.indexCount(), index32))
         return false;
       Packing.vertices(vertices.data(), batch);
-      Packing.indices(indices.data(), batch.indices(), index32);
+      Packing.indices(indices.data(), batch.indices(), batch.indexCount(), index32);
       bgfx_set_transient_vertex_buffer(0, vertices, 0, batch.vertexCount());
-      bgfx_set_transient_index_buffer(indices, 0, batch.indices().length);
-      return submitState(texture, lightmap, mvp, texMatrix, color, state, cutout);
+      bgfx_set_transient_index_buffer(indices, 0, batch.indexCount());
+      return submitState(
+          texture,
+          lightmap,
+          mvp,
+          texMatrix,
+          color,
+          state,
+          cutout,
+          reuseState,
+          preserveSectionState);
     }
   }
 
@@ -100,19 +166,26 @@ public final class LightmapTexturePipeline implements AutoCloseable {
       float[] texMatrix,
       float[] color,
       RenderState.Snapshot state,
-      boolean cutout) {
+      boolean cutout,
+      boolean reuseState,
+      boolean preserveSectionState) {
     bgfx_set_uniform(mvpUniform, mvp, 1);
-    bgfx_set_uniform(colorUniform, color, 1);
-    bgfx_set_uniform(textureMatrixUniform, texMatrix, 1);
-    bgfx_set_texture(0, samplerUniform, texture.handle(), texture.samplerFlags());
-    bgfx_set_texture(2, lightmapUniform, lightmap.handle(), lightmap.samplerFlags());
-    if (state.scissorEnabled()) {
-      bgfx_set_scissor(
-          state.scissorX(), state.scissorY(), state.scissorWidth(), state.scissorHeight());
+    if (!reuseState) {
+      bgfx_set_uniform(colorUniform, color, 1);
+      bgfx_set_uniform(textureMatrixUniform, texMatrix, 1);
+      bgfx_set_texture(0, samplerUniform, texture.handle(), texture.samplerFlags());
+      bgfx_set_texture(2, lightmapUniform, lightmap.handle(), lightmap.samplerFlags());
+      if (state.scissorEnabled()) {
+        bgfx_set_scissor(
+            state.scissorX(), state.scissorY(), state.scissorWidth(), state.scissorHeight());
+      }
+      bgfx_set_state(state.bgfxState(), 0);
     }
-    bgfx_set_state(state.bgfxState(), 0);
     bgfx_submit(
-        Backend.MAIN_VIEW, cutout ? cutoutProgram.handle() : program.handle(), 0, BGFX_DISCARD_ALL);
+        Backend.MAIN_VIEW,
+        cutout ? cutoutProgram.handle() : program.handle(),
+        0,
+        preserveSectionState ? SECTION_GEOMETRY_DISCARD : BGFX_DISCARD_ALL);
     return true;
   }
 
