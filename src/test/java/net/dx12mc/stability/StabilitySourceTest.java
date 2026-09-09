@@ -278,6 +278,9 @@ class StabilitySourceTest {
     assertTrue(scene.contains("Previous frame CPU/GPU"));
     assertTrue(scene.contains("GC total / since overlay refresh"));
     assertTrue(bridge.contains("createSection"));
+    assertTrue(bridge.contains("sectionContextPrepared"));
+    assertTrue(bridge.contains("if (sectionContextPrepared) return context"));
+    assertTrue(bridge.contains("prepareSharedUniforms"));
     assertTrue(bridge.contains("currentIfReady"));
     assertTrue(bridge.contains("index32(Batch batch)"));
     String controller = read("render/Controller.java");
@@ -294,8 +297,12 @@ class StabilitySourceTest {
     String mixins = Files.readString(Path.of("src", "main", "resources", "dx12mc.mixins.json"));
     assertTrue(level.contains("renderSectionLayer"));
     assertTrue(level.contains("Uniform;set(FFF)V"));
+    assertTrue(level.contains("Uniform;upload()V"));
+    assertTrue(level.contains("VertexBuffer;bind()V"));
+    assertTrue(level.contains("VertexBuffer;unbind()V"));
     assertTrue(level.contains("beginSectionLayer"));
     assertTrue(level.contains("sectionChunkOffset"));
+    assertTrue(level.contains("suppressLegacySectionDriverCalls"));
     assertTrue(level.contains("endSectionLayer"));
     assertTrue(vertexBuffer.contains("method = \"draw()V\""));
     assertTrue(vertexBuffer.contains("drawSection(dx12mc$slot())"));
@@ -308,6 +315,9 @@ class StabilitySourceTest {
     assertFalse(controller.contains("new Matrix4f(modelView)"));
     assertTrue(controller.contains("translate(offsetX, offsetY, offsetZ)"));
     assertTrue(mixins.contains("LevelRendererMixin"));
+    assertTrue(level.contains("if (!DX12MC.runtime().suppressLegacySectionDriverCalls())"));
+    assertTrue(runtime.contains("suppressLegacySectionDriverCalls"));
+    assertTrue(controller.contains("lifecycle.active() && section.active()"));
   }
 
   @Test
