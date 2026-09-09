@@ -14,7 +14,7 @@ public final class Packing {
   }
 
   public static int indexBytes(Batch batch) {
-    return Math.multiplyExact(batch.indices().length, index32(batch) ? Integer.BYTES : Short.BYTES);
+    return Math.multiplyExact(batch.indexCount(), index32(batch) ? Integer.BYTES : Short.BYTES);
   }
 
   public static long gpuBytes(Batch batch) {
@@ -56,10 +56,12 @@ public final class Packing {
   }
 
   public static void indices(ByteBuffer target, int[] source, boolean index32) {
+    indices(target, source, source.length, index32);
+  }
+
+  public static void indices(ByteBuffer target, int[] source, int count, boolean index32) {
     target.order(ByteOrder.nativeOrder());
-    if (index32)
-      for (int i = 0; i < source.length; i++) target.putInt(i * Integer.BYTES, source[i]);
-    else
-      for (int i = 0; i < source.length; i++) target.putShort(i * Short.BYTES, (short) source[i]);
+    if (index32) for (int i = 0; i < count; i++) target.putInt(i * Integer.BYTES, source[i]);
+    else for (int i = 0; i < count; i++) target.putShort(i * Short.BYTES, (short) source[i]);
   }
 }
