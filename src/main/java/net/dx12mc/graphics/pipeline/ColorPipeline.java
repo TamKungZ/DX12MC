@@ -14,6 +14,8 @@ import org.lwjgl.bgfx.BGFXTransientVertexBuffer;
 import org.lwjgl.system.MemoryStack;
 
 public final class ColorPipeline implements AutoCloseable {
+  private static final int SECTION_GEOMETRY_DISCARD =
+      BGFX_DISCARD_INDEX_BUFFER | BGFX_DISCARD_VERTEX_STREAMS;
   private static final String VS = "/assets/dx12mc/shaders/d3d12/vs_position_color.bin";
   private static final String FS = "/assets/dx12mc/shaders/d3d12/fs_position_color.bin";
   private final Layout layout;
@@ -37,26 +39,56 @@ public final class ColorPipeline implements AutoCloseable {
   }
 
   public boolean submit(Mesh mesh, float[] mvp, float[] color, RenderState.Snapshot state) {
+    return submit(mesh, mvp, color, state, false, false);
+  }
+
+  public boolean submitSection(
+      Mesh mesh, float[] mvp, float[] color, RenderState.Snapshot state, boolean reuseState) {
+    return submit(mesh, mvp, color, state, reuseState, true);
+  }
+
+  private boolean submit(
+      Mesh mesh,
+      float[] mvp,
+      float[] color,
+      RenderState.Snapshot state,
+      boolean reuseState,
+      boolean preserveSectionState) {
     if (state.scissorEmpty()) return true;
     if (mesh == null || !mesh.valid()) return false;
     mesh.bind();
-    return submitState(mvp, color, state);
+    return submitState(mvp, color, state, reuseState, preserveSectionState);
   }
 
   public boolean submit(Batch batch, float[] mvp, float[] color, RenderState.Snapshot state) {
+    return submit(batch, mvp, color, state, false, false);
+  }
+
+  public boolean submitSection(
+      Batch batch, float[] mvp, float[] color, RenderState.Snapshot state, boolean reuseState) {
+    return submit(batch, mvp, color, state, reuseState, true);
+  }
+
+  private boolean submit(
+      Batch batch,
+      float[] mvp,
+      float[] color,
+      RenderState.Snapshot state,
+      boolean reuseState,
+      boolean preserveSectionState) {
     if (state.scissorEmpty()) return true;
     boolean index32 = Packing.index32(batch);
     try (MemoryStack stack = MemoryStack.stackPush()) {
       BGFXTransientVertexBuffer vertices = BGFXTransientVertexBuffer.calloc(stack);
       BGFXTransientIndexBuffer indices = BGFXTransientIndexBuffer.calloc(stack);
       if (!bgfx_alloc_transient_buffers(
-          vertices, layout.value(), batch.vertexCount(), indices, batch.indices().length, index32))
+          vertices, layout.value(), batch.vertexCount(), indices, batch.indexCount(), index32))
         return false;
       Packing.vertices(vertices.data(), batch);
-      Packing.indices(indices.data(), batch.indices(), index32);
+      Packing.indices(indices.data(), batch.indices(), batch.indexCount(), index32);
       bgfx_set_transient_vertex_buffer(0, vertices, 0, batch.vertexCount());
-      bgfx_set_transient_index_buffer(indices, 0, batch.indices().length);
-      return submitState(mvp, color, state);
+      bgfx_set_transient_index_buffer(indices, 0, batch.indexCount());
+      return submitState(mvp, color, state, reuseState, preserveSectionState);
     }
   }
 
@@ -73,16 +105,27 @@ public final class ColorPipeline implements AutoCloseable {
     program.close();
   }
 
-  private boolean submitState(float[] mvp, float[] color, RenderState.Snapshot state) {
+  private boolean submitState(
+      float[] mvp,
+      float[] color,
+      RenderState.Snapshot state,
+      boolean reuseState,
+      boolean preserveSectionState) {
     if (state.scissorEmpty()) return true;
     bgfx_set_uniform(mvpUniform, mvp, 1);
-    bgfx_set_uniform(colorUniform, color, 1);
-    if (state.scissorEnabled()) {
-      bgfx_set_scissor(
-          state.scissorX(), state.scissorY(), state.scissorWidth(), state.scissorHeight());
+    if (!reuseState) {
+      bgfx_set_uniform(colorUniform, color, 1);
+      if (state.scissorEnabled()) {
+        bgfx_set_scissor(
+            state.scissorX(), state.scissorY(), state.scissorWidth(), state.scissorHeight());
+      }
+      bgfx_set_state(state.bgfxState(), 0);
     }
-    bgfx_set_state(state.bgfxState(), 0);
-    bgfx_submit(Backend.MAIN_VIEW, program.handle(), 0, BGFX_DISCARD_ALL);
+    bgfx_submit(
+        Backend.MAIN_VIEW,
+        program.handle(),
+        0,
+        preserveSectionState ? SECTION_GEOMETRY_DISCARD : BGFX_DISCARD_ALL);
     return true;
   }
 }
