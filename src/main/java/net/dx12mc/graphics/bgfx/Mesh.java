@@ -37,8 +37,7 @@ public final class Mesh implements AutoCloseable {
   public static Mesh create(Batch batch, BGFXVertexLayout layout) {
     boolean index32 = Packing.index32(batch);
     int vertexBytes = Packing.vertexBytes(batch);
-    int indexBytes =
-        Math.multiplyExact(batch.indices().length, index32 ? Integer.BYTES : Short.BYTES);
+    int indexBytes = Math.multiplyExact(batch.indexCount(), index32 ? Integer.BYTES : Short.BYTES);
     short vertexHandle = BGFX_INVALID_HANDLE;
     short indexHandle = BGFX_INVALID_HANDLE;
     try {
@@ -50,7 +49,8 @@ public final class Mesh implements AutoCloseable {
       }
       BGFXMemory indexMemory =
           StagingMemory.allocate(
-              indexBytes, data -> Packing.indices(data, batch.indices(), index32));
+              indexBytes,
+              data -> Packing.indices(data, batch.indices(), batch.indexCount(), index32));
       int flags = BGFX_BUFFER_ALLOW_RESIZE | (index32 ? BGFX_BUFFER_INDEX32 : BGFX_BUFFER_NONE);
       indexHandle = bgfx_create_dynamic_index_buffer_mem(indexMemory, flags);
       if (!BGFX_HANDLE_IS_VALID(indexHandle)) {
@@ -60,7 +60,7 @@ public final class Mesh implements AutoCloseable {
           vertexHandle,
           indexHandle,
           batch.vertexCount(),
-          batch.indices().length,
+          batch.indexCount(),
           vertexBytes,
           indexBytes,
           index32);
@@ -74,7 +74,7 @@ public final class Mesh implements AutoCloseable {
   public static long estimatedBytes(Batch batch) {
     boolean index32 = Packing.index32(batch);
     return (long) Packing.vertexBytes(batch)
-        + (long) batch.indices().length * (index32 ? Integer.BYTES : Short.BYTES);
+        + (long) batch.indexCount() * (index32 ? Integer.BYTES : Short.BYTES);
   }
 
   public void updateIndices(Batch batch) {
@@ -87,12 +87,13 @@ public final class Mesh implements AutoCloseable {
       throw new IllegalStateException("index update requires wider index storage");
     }
     int newIndexBytes =
-        Math.multiplyExact(batch.indices().length, index32 ? Integer.BYTES : Short.BYTES);
+        Math.multiplyExact(batch.indexCount(), index32 ? Integer.BYTES : Short.BYTES);
     BGFXMemory indexMemory =
         StagingMemory.allocate(
-            newIndexBytes, data -> Packing.indices(data, batch.indices(), index32));
+            newIndexBytes,
+            data -> Packing.indices(data, batch.indices(), batch.indexCount(), index32));
     bgfx_update_dynamic_index_buffer(indices, 0, indexMemory);
-    indexCount = batch.indices().length;
+    indexCount = batch.indexCount();
     indexBytes = newIndexBytes;
     bytes = (long) vertexBytes + indexBytes;
   }
