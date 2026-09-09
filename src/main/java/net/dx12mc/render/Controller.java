@@ -287,6 +287,10 @@ public final class Controller implements AutoCloseable {
     }
   }
 
+  public boolean suppressLegacySectionDriverCalls() {
+    return config.nativeMode() && lifecycle.active() && section.active();
+  }
+
   public void endSectionLayer() {
     section.end();
     this.semanticIntent = "frame";
