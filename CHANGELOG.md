@@ -2,6 +2,14 @@
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
+## 0.8.13 - Immediate-draw frame-pacing cleanup
+
+- Reuse growable CPU attribute and index buffers for immediate entity, particle, weather, text and GUI geometry instead of allocating and discarding up to seven large primitive arrays for every draw.
+- Track logical vertex/index counts separately from reusable array capacity so transient uploads, statistics and memory accounting never process stale scratch data.
+- Generate implicit triangle, quad, strip and fan indices directly into reusable storage while preserving exact-sized CPU mirrors for persistent compiled-section meshes.
+- Preserve constant shader uniforms, textures, samplers and render state across compiled-section submissions within the same render layer; update only the per-section transform and geometry bindings.
+- Stop manual F2 screenshots at the semantic screenshot entry point in native mode and show a non-fatal message instead of crashing on an unsupported OpenGL texture readback.
+
 ## 0.8.12 - Remove legacy GL calls from native terrain draws
 
 - Stop uploading Minecraft's OpenGL `ChunkOffset` uniform for every compiled-section draw. The offset is already consumed by the D3D12 section transform, so the legacy upload was duplicate driver work.
