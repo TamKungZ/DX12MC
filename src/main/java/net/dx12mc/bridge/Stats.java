@@ -121,7 +121,7 @@ public final class Stats {
     submittedTotal++;
     submittedFrame++;
     verticesFrame += batch.vertexCount();
-    indicesFrame += batch.indices().length;
+    indicesFrame += batch.indexCount();
     if (transientBuffer) transientSubmitTotal++;
     else staticSubmitTotal++;
     if (textured) {
