@@ -201,6 +201,10 @@ public final class Runtime implements AutoCloseable {
     return controller.suppressAutomaticWorldIconCapture();
   }
 
+  public boolean suppressManualScreenshotCapture() {
+    return controller.suppressManualScreenshotCapture();
+  }
+
   public void assertOpenGlDrawAllowed(String operation) {
     controller.assertOpenGlDrawAllowed(operation);
   }
