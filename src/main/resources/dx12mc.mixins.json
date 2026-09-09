@@ -12,7 +12,8 @@
     "TextureUtilMixin",
     "RenderSystemMixin",
     "BufferUploaderMixin",
-    "RenderTargetMixin"
+    "RenderTargetMixin",
+    "ScreenshotMixin"
   ],
   "injectors": {
     "defaultRequire": 1
