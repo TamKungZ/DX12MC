@@ -2,6 +2,13 @@
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
+## 0.8.12 - Remove legacy GL calls from native terrain draws
+
+- Stop uploading Minecraft's OpenGL `ChunkOffset` uniform for every compiled-section draw. The offset is already consumed by the D3D12 section transform, so the legacy upload was duplicate driver work.
+- Stop binding and unbinding OpenGL vertex arrays inside the compiled-section layer after D3D12 takeover. The native mesh is bound by bgfx and never consumes the legacy VAO.
+- Resolve the section shader, textures, lightmap, render state, tint and texture matrix once per render layer instead of repeating the same lookups for every visible section.
+- Keep render-layer setup and shader state observation intact so D3D12 state, texture, cutout and lightmap selection retain vanilla semantics.
+
 ## 0.8.11 - Section draw hot-path cleanup
 
 - Precompute section-layer clip transforms and framebuffer dimensions once per layer so visible sections avoid repeated lifecycle, window and matrix work.
