@@ -1,6 +1,7 @@
 package net.dx12mc.mixin;
 
 import com.mojang.blaze3d.shaders.Uniform;
+import com.mojang.blaze3d.vertex.VertexBuffer;
 import net.dx12mc.DX12MC;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.LevelRenderer;
@@ -66,7 +67,31 @@ public abstract class LevelRendererMixin {
       at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/shaders/Uniform;set(FFF)V"))
   private void dx12mc$chunkOffset(Uniform uniform, float x, float y, float z) {
     DX12MC.runtime().sectionChunkOffset(x, y, z);
-    uniform.set(x, y, z);
+    if (!DX12MC.runtime().suppressLegacySectionDriverCalls()) uniform.set(x, y, z);
+  }
+
+  @Redirect(
+      method =
+          "renderSectionLayer(Lnet/minecraft/client/renderer/RenderType;DDDLorg/joml/Matrix4f;Lorg/joml/Matrix4f;)V",
+      at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/shaders/Uniform;upload()V"))
+  private void dx12mc$skipLegacyChunkOffsetUpload(Uniform uniform) {
+    if (!DX12MC.runtime().suppressLegacySectionDriverCalls()) uniform.upload();
+  }
+
+  @Redirect(
+      method =
+          "renderSectionLayer(Lnet/minecraft/client/renderer/RenderType;DDDLorg/joml/Matrix4f;Lorg/joml/Matrix4f;)V",
+      at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/vertex/VertexBuffer;bind()V"))
+  private void dx12mc$skipLegacySectionBufferBind(VertexBuffer buffer) {
+    if (!DX12MC.runtime().suppressLegacySectionDriverCalls()) buffer.bind();
+  }
+
+  @Redirect(
+      method =
+          "renderSectionLayer(Lnet/minecraft/client/renderer/RenderType;DDDLorg/joml/Matrix4f;Lorg/joml/Matrix4f;)V",
+      at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/vertex/VertexBuffer;unbind()V"))
+  private void dx12mc$skipLegacySectionBufferUnbind() {
+    if (!DX12MC.runtime().suppressLegacySectionDriverCalls()) VertexBuffer.unbind();
   }
 
   @Inject(
