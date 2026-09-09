@@ -253,6 +253,7 @@ class StabilitySourceTest {
         read("bridge/Bridge.java")
             + read("bridge/DrawContextFactory.java")
             + read("bridge/DrawContext.java")
+            + read("bridge/mesh/Encoder.java")
             + read("bridge/mesh/MeshStore.java")
             + read("bridge/texture/Registry.java")
             + read("bridge/texture/TextureEntry.java")
@@ -283,6 +284,10 @@ class StabilitySourceTest {
     assertTrue(bridge.contains("prepareSharedUniforms"));
     assertTrue(bridge.contains("currentIfReady"));
     assertTrue(bridge.contains("index32(Batch batch)"));
+    assertTrue(bridge.contains("Encoder.encodeReusable(mesh, immediateScratch)"));
+    assertTrue(bridge.contains("private final Encoder.Scratch immediateScratch"));
+    assertTrue(bridge.contains("dx12mc.immediate.scratch.elements"));
+    assertTrue(bridge.contains("batch.indexCount()"));
     String controller = read("render/Controller.java");
     assertTrue(controller.contains("if (debug.shouldRender(config.mode(), config.overlay()))"));
     assertTrue(controller.contains("private FrameSize frameSize(Window window)"));
@@ -318,6 +323,17 @@ class StabilitySourceTest {
     assertTrue(level.contains("if (!DX12MC.runtime().suppressLegacySectionDriverCalls())"));
     assertTrue(runtime.contains("suppressLegacySectionDriverCalls"));
     assertTrue(controller.contains("lifecycle.active() && section.active()"));
+    String pipelines =
+        read("graphics/pipeline/PipelineSet.java")
+            + read("graphics/pipeline/ColorPipeline.java")
+            + read("graphics/pipeline/TexturePipeline.java")
+            + read("graphics/pipeline/LightmapTexturePipeline.java");
+    assertTrue(pipelines.contains("SECTION_GEOMETRY_DISCARD"));
+    assertTrue(pipelines.contains("BGFX_DISCARD_INDEX_BUFFER | BGFX_DISCARD_VERTEX_STREAMS"));
+    assertTrue(pipelines.contains("if (!reuseState)"));
+    assertTrue(pipelines.contains("bgfx_discard(BGFX_DISCARD_ALL)"));
+    assertTrue(pipelines.contains("preparedSectionPipeline"));
+    assertTrue(read("bridge/Bridge.java").contains("pipelines.endSectionLayer()"));
   }
 
   @Test
@@ -337,6 +353,21 @@ class StabilitySourceTest {
     assertTrue(glState.contains("_getTexImage(IIIIJ)V"));
     assertTrue(glState.contains("assertOpenGlReadbackAllowed"));
     assertTrue(controller.contains("A D3D12 readback path is not implemented yet"));
+  }
+
+  @Test
+  void manualScreenshotReadbackIsStoppedAtItsSemanticSourceWithoutCrashing() throws IOException {
+    String screenshot = read("mixin/ScreenshotMixin.java");
+    String runtime = read("client/Runtime.java");
+    String controller = read("render/Controller.java");
+    String mixins = Files.readString(Path.of("src", "main", "resources", "dx12mc.mixins.json"));
+    assertTrue(screenshot.contains("@Mixin(Screenshot.class)"));
+    assertTrue(screenshot.contains("suppressManualScreenshotCapture()"));
+    assertTrue(screenshot.contains("ci.cancel()"));
+    assertTrue(screenshot.contains("Win+Shift+S"));
+    assertTrue(runtime.contains("suppressManualScreenshotCapture"));
+    assertTrue(controller.contains("public boolean suppressManualScreenshotCapture()"));
+    assertTrue(mixins.contains("ScreenshotMixin"));
   }
 
   @Test
