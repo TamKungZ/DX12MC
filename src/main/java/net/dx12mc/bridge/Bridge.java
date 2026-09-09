@@ -20,6 +20,7 @@ public final class Bridge implements AutoCloseable {
   private final Registry textures;
   private final DrawContextFactory contexts;
   private final PipelineSet pipelines = new PipelineSet();
+  private final Encoder.Scratch immediateScratch = new Encoder.Scratch();
   private String semanticIntent = "frame";
   private boolean sectionIntent;
 
@@ -45,7 +46,9 @@ public final class Bridge implements AutoCloseable {
 
   public void semanticIntent(String intent) {
     this.semanticIntent = intent == null || intent.isBlank() ? "frame" : intent;
-    this.sectionIntent = semanticIntent.startsWith("level.section-layer");
+    boolean nextSectionIntent = semanticIntent.startsWith("level.section-layer");
+    if (sectionIntent && !nextSectionIntent) pipelines.endSectionLayer();
+    this.sectionIntent = nextSectionIntent;
     contexts.semanticIntent(semanticIntent);
   }
 
@@ -228,7 +231,7 @@ public final class Bridge implements AutoCloseable {
                   + ", vertices="
                   + batch.vertexCount()
                   + ", indices="
-                  + batch.indices().length
+                  + batch.indexCount()
                   + ", shader="
                   + DrawContextFactory.shaderName());
         }
@@ -244,7 +247,7 @@ public final class Bridge implements AutoCloseable {
               + ", vertices="
               + batch.vertexCount()
               + ", indices="
-              + batch.indices().length
+              + batch.indexCount()
               + ", textured="
               + context.textured()
               + ", shader="
@@ -281,7 +284,7 @@ public final class Bridge implements AutoCloseable {
                 + ", vertices="
                 + batch.vertexCount()
                 + ", indices="
-                + batch.indices().length
+                + batch.indexCount()
                 + ", shader="
                 + DrawContextFactory.shaderName());
       }
@@ -307,7 +310,7 @@ public final class Bridge implements AutoCloseable {
               + ", vertices="
               + batch.vertexCount()
               + ", indices="
-              + batch.indices().length
+              + batch.indexCount()
               + ", shader="
               + DrawContextFactory.shaderName());
     }
@@ -328,7 +331,7 @@ public final class Bridge implements AutoCloseable {
       stats.omittedNativeLineOverlay();
       return true;
     }
-    Batch batch = Encoder.encode(mesh);
+    Batch batch = Encoder.encodeReusable(mesh, immediateScratch);
     stats.immediateCaptured(batch);
     if (batch == null) {
       throw unsupported(
@@ -353,7 +356,7 @@ public final class Bridge implements AutoCloseable {
               + ", vertices="
               + batch.vertexCount()
               + ", indices="
-              + batch.indices().length
+              + batch.indexCount()
               + ", textured="
               + context.textured()
               + ", shader="
@@ -402,11 +405,19 @@ public final class Bridge implements AutoCloseable {
   }
 
   private boolean submitTransient(Batch batch, DrawContext context) {
+    if (sectionIntent) {
+      return pipelines.submitSection(
+          batch, context, contexts.matrix(), contexts.textureMatrix(), contexts.tint());
+    }
     return pipelines.submit(
         batch, context, contexts.matrix(), contexts.textureMatrix(), contexts.tint());
   }
 
   private boolean submitPersistent(Mesh mesh, DrawContext context) {
+    if (sectionIntent) {
+      return pipelines.submitSection(
+          mesh, context, contexts.matrix(), contexts.textureMatrix(), contexts.tint());
+    }
     return pipelines.submit(
         mesh, context, contexts.matrix(), contexts.textureMatrix(), contexts.tint());
   }
