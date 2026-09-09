@@ -53,8 +53,7 @@ public final class MeshStore implements AutoCloseable {
     }
     MeshData.DrawState state = mesh.drawState();
     long before = slot.batch() == null ? 0L : slot.batch().cpuBytes();
-    slot.capture(
-        batch, usage == VertexBuffer.Usage.DYNAMIC, state.indexType(), batch.indices().length);
+    slot.capture(batch, usage == VertexBuffer.Usage.DYNAMIC, state.indexType(), batch.indexCount());
     cpuBytes += batch.cpuBytes() - before;
     stats.meshCpuBytes(cpuBytes);
     slots.add(slot);
@@ -71,7 +70,7 @@ public final class MeshStore implements AutoCloseable {
         Encoder.decodeIndexUpdate(source, slot.indexType(), slot.indexCount(), batch.vertexCount());
     if (indices == null) {
       if (batch.sourceMode() == VertexFormat.Mode.QUADS
-          && batch.indices().length == slot.indexCount()) {
+          && batch.indexCount() == slot.indexCount()) {
         stats.staleSortedIndexUpdate();
         return;
       }
