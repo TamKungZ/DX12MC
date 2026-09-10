@@ -19,6 +19,7 @@ final class RendererLifecycle implements AutoCloseable {
   private final Stats stats;
   private final Backend backend = new Backend();
   private final Scene debug = new Scene();
+  private final PerformanceTelemetry performance;
   private State state = State.NEW;
   private boolean frameOpen;
   private FatalRenderException failure;
@@ -28,6 +29,7 @@ final class RendererLifecycle implements AutoCloseable {
     this.config = config;
     this.bridge = bridge;
     this.stats = stats;
+    this.performance = new PerformanceTelemetry(stats);
   }
 
   void initialize() {
@@ -103,6 +105,7 @@ final class RendererLifecycle implements AutoCloseable {
       backend.endFrame();
       frameOpen = false;
       if (bridge != null) bridge.onFrameBoundary();
+      performance.record(backend);
       stats.suppressedOpenGlSwap();
       stats.nextFrame();
     } catch (FatalRenderException fatal) {

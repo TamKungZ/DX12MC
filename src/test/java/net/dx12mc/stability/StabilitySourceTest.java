@@ -297,6 +297,8 @@ class StabilitySourceTest {
     String controller = read("render/Controller.java");
     assertTrue(controller.contains("if (debug.shouldRender(config.mode(), config.overlay()))"));
     assertTrue(controller.contains("private FrameSize frameSize(Window window)"));
+    assertTrue(controller.contains("performance.record(backend)"));
+    assertTrue(read("render/PerformanceTelemetry.java").contains("DX12MC PERF"));
   }
 
   @Test
