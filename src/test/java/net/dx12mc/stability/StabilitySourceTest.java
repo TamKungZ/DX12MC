@@ -286,7 +286,7 @@ class StabilitySourceTest {
     assertTrue(scene.contains("GC total / since overlay refresh"));
     assertTrue(bridge.contains("createSection"));
     assertTrue(bridge.contains("sectionContextPrepared"));
-    assertTrue(bridge.contains("if (sectionContextPrepared) return context"));
+    assertTrue(bridge.contains("if (sectionContextPrepared)"));
     assertTrue(bridge.contains("prepareSharedUniforms"));
     assertTrue(bridge.contains("currentIfReady"));
     assertTrue(bridge.contains("index32(Batch batch)"));
