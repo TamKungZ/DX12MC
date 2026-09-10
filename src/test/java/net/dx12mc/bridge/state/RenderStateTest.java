@@ -101,15 +101,13 @@ class RenderStateTest {
   }
 
   @Test
-  void unsupportedRasterStatesFailExplicitlyInsteadOfRenderingDifferently() {
+  void polygonOffsetBecomesDepthBiasWhileUnsupportedRasterStatesStillFail() {
     RenderState state = new RenderState();
     state.polygonOffset(true);
     state.polygonOffset(1.0f, 1.0f);
-    assertTrue(
-        assertThrows(IllegalStateException.class, () -> state.snapshot(854, 480))
-            .getMessage()
-            .contains("polygon offset"));
+    assertTrue(state.snapshot(854, 480).depthBias() > 0.0f);
     state.polygonOffset(false);
+    assertEquals(0.0f, state.snapshot(854, 480).depthBias());
     state.polygonMode(0x0408, 0x1B01);
     assertTrue(
         assertThrows(IllegalStateException.class, () -> state.snapshot(854, 480))

@@ -24,6 +24,7 @@ final class DrawContextFactory {
   private boolean classifiedShaderCutout;
   private boolean skyIntent;
   private boolean sectionContextPrepared;
+  private float sectionDepthBias;
 
   DrawContextFactory(Registry textures) {
     this.textures = textures;
@@ -42,6 +43,7 @@ final class DrawContextFactory {
     Texture sampled = resolveBaseTexture(batch, shader);
     Texture lightmap = immediate ? null : resolveLightmap(batch, classifiedShaderFamily);
     RenderState.Snapshot state = snapshot(framebufferWidth, framebufferHeight, immediate);
+    applyDepthBias(state.depthBias());
     return context.set(
         batch.hasUv0(), sampled, lightmap != null, lightmap, classifiedShaderCutout, state);
   }
@@ -49,21 +51,32 @@ final class DrawContextFactory {
   DrawContext createSection(
       Batch batch, Matrix4f clipTransform, int framebufferWidth, int framebufferHeight) {
     clipTransform.get(matrix);
-    if (sectionContextPrepared) return context;
+    if (sectionContextPrepared) {
+      applyDepthBias(sectionDepthBias);
+      return context;
+    }
     prepareSharedUniforms();
     String shader = shaderName();
     classifyShader(shader);
     Texture sampled = resolveBaseTexture(batch, shader);
     Texture lightmap = resolveLightmap(batch, classifiedShaderFamily);
     RenderState.Snapshot state = snapshot(framebufferWidth, framebufferHeight, false);
+    sectionDepthBias = state.depthBias();
+    applyDepthBias(sectionDepthBias);
     sectionContextPrepared = true;
     return context.set(
         batch.hasUv0(), sampled, lightmap != null, lightmap, classifiedShaderCutout, state);
   }
 
+  void sectionMatrix(Matrix4f clipTransform) {
+    clipTransform.get(matrix);
+    applyDepthBias(sectionDepthBias);
+  }
+
   void semanticIntent(String intent) {
     skyIntent = intent != null && intent.startsWith("level.sky");
     sectionContextPrepared = false;
+    sectionDepthBias = 0.0f;
   }
 
   RenderState state() {
@@ -91,6 +104,14 @@ final class DrawContextFactory {
   private void prepareSharedUniforms() {
     RenderSystem.getTextureMatrix().get(textureMatrix);
     System.arraycopy(RenderSystem.getShaderColor(), 0, tint, 0, tint.length);
+  }
+
+  private void applyDepthBias(float bias) {
+    if (bias == 0.0f) return;
+    matrix[2] += bias * matrix[3];
+    matrix[6] += bias * matrix[7];
+    matrix[10] += bias * matrix[11];
+    matrix[14] += bias * matrix[15];
   }
 
   private RenderState.Snapshot snapshot(int width, int height, boolean immediate) {

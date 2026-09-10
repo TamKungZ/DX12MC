@@ -271,7 +271,8 @@ public final class RenderState {
         depthTest,
         depthWrite,
         blend,
-        cull);
+        cull,
+        depthBias());
   }
 
   private boolean matches(
@@ -287,14 +288,6 @@ public final class RenderState {
   }
 
   private void validateUnsupportedState() {
-    if (polygonOffset) {
-      throw new IllegalStateException(
-          "OpenGL polygon offset/depth bias is active but D3D12 translation is not implemented:"
-              + " factor="
-              + polygonOffsetFactor
-              + ", units="
-              + polygonOffsetUnits);
-    }
     if (polygonMode != GL_FILL) {
       String mode =
           polygonMode == GL_LINE
@@ -312,6 +305,12 @@ public final class RenderState {
     }
   }
 
+  private float depthBias() {
+    if (!polygonOffset) return 0.0f;
+    float bias = (polygonOffsetFactor + polygonOffsetUnits * 0.1f) * 1.0e-4f;
+    return Math.max(-0.01f, Math.min(0.01f, bias));
+  }
+
   public record Snapshot(
       long bgfxState,
       boolean scissorEnabled,
@@ -324,5 +323,6 @@ public final class RenderState {
       boolean depthTest,
       boolean depthWrite,
       boolean blend,
-      boolean cull) {}
+      boolean cull,
+      float depthBias) {}
 }
