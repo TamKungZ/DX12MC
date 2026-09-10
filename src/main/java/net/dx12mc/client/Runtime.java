@@ -8,6 +8,7 @@ import net.dx12mc.bridge.Slot;
 import net.dx12mc.config.Config;
 import net.dx12mc.render.Controller;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.RenderType;
 import org.joml.Matrix4f;
 
 public final class Runtime implements AutoCloseable {
@@ -53,8 +54,14 @@ public final class Runtime implements AutoCloseable {
     controller.endSky();
   }
 
-  public void beginSectionLayer(Matrix4f modelView, Matrix4f projection) {
-    controller.beginSectionLayer(modelView, projection);
+  public void beginSectionLayer(
+      RenderType renderType,
+      double cameraX,
+      double cameraY,
+      double cameraZ,
+      Matrix4f modelView,
+      Matrix4f projection) {
+    controller.beginSectionLayer(renderType, cameraX, cameraY, cameraZ, modelView, projection);
   }
 
   public void sectionChunkOffset(float x, float y, float z) {

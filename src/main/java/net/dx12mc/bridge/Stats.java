@@ -40,6 +40,16 @@ public final class Stats {
       lightmappedSubmitFrame,
       verticesFrame,
       indicesFrame;
+  private long regionSectionCollectedTotal,
+      regionSectionCollectedFrame,
+      regionPageSubmitTotal,
+      regionPageSubmitFrame,
+      regionRebuildTotal,
+      regionRebuildDeferredTotal;
+  private long regionResidentCurrent,
+      regionResidentPeak,
+      regionResidentBytes,
+      regionResidentBytesPeak;
 
   public void captured(Batch batch) {
     if (batch == null) rejectedCaptureTotal++;
@@ -114,14 +124,34 @@ public final class Stats {
       boolean transientBuffer,
       boolean textured,
       boolean lightmapped) {
+    submitted(
+        batch.vertexCount(), batch.indexCount(), success, transientBuffer, textured, lightmapped);
+  }
+
+  public void submittedRegionPage(
+      int vertexCount, int indexCount, boolean success, boolean textured, boolean lightmapped) {
+    submitted(vertexCount, indexCount, success, false, textured, lightmapped);
+    if (success) {
+      regionPageSubmitTotal++;
+      regionPageSubmitFrame++;
+    }
+  }
+
+  private void submitted(
+      int vertexCount,
+      int indexCount,
+      boolean success,
+      boolean transientBuffer,
+      boolean textured,
+      boolean lightmapped) {
     if (!success) {
       failedSubmitTotal++;
       return;
     }
     submittedTotal++;
     submittedFrame++;
-    verticesFrame += batch.vertexCount();
-    indicesFrame += batch.indexCount();
+    verticesFrame += vertexCount;
+    indicesFrame += indexCount;
     if (transientBuffer) transientSubmitTotal++;
     else staticSubmitTotal++;
     if (textured) {
@@ -132,6 +162,26 @@ public final class Stats {
       lightmappedSubmitTotal++;
       lightmappedSubmitFrame++;
     }
+  }
+
+  public void regionSectionCollected() {
+    regionSectionCollectedTotal++;
+    regionSectionCollectedFrame++;
+  }
+
+  public void regionRebuilt() {
+    regionRebuildTotal++;
+  }
+
+  public void regionRebuildDeferred() {
+    regionRebuildDeferredTotal++;
+  }
+
+  public void regionResident(long current, long bytes) {
+    regionResidentCurrent = Math.max(0L, current);
+    regionResidentPeak = Math.max(regionResidentPeak, regionResidentCurrent);
+    regionResidentBytes = Math.max(0L, bytes);
+    regionResidentBytesPeak = Math.max(regionResidentBytesPeak, regionResidentBytes);
   }
 
   public void cancelledVanillaDraw() {
@@ -257,7 +307,17 @@ public final class Stats {
         texturedSubmitFrame,
         lightmappedSubmitFrame,
         verticesFrame,
-        indicesFrame);
+        indicesFrame,
+        regionSectionCollectedTotal,
+        regionSectionCollectedFrame,
+        regionPageSubmitTotal,
+        regionPageSubmitFrame,
+        regionRebuildTotal,
+        regionRebuildDeferredTotal,
+        regionResidentCurrent,
+        regionResidentPeak,
+        regionResidentBytes,
+        regionResidentBytesPeak);
   }
 
   public void nextFrame() {
@@ -266,6 +326,36 @@ public final class Stats {
     lightmappedSubmitFrame = 0;
     verticesFrame = 0;
     indicesFrame = 0;
+    regionSectionCollectedFrame = 0;
+    regionPageSubmitFrame = 0;
+  }
+
+  public long submittedThisFrame() {
+    return submittedFrame;
+  }
+
+  public long verticesThisFrame() {
+    return verticesFrame;
+  }
+
+  public long indicesThisFrame() {
+    return indicesFrame;
+  }
+
+  public long regionSectionsThisFrame() {
+    return regionSectionCollectedFrame;
+  }
+
+  public long regionPagesThisFrame() {
+    return regionPageSubmitFrame;
+  }
+
+  public long regionRebuilds() {
+    return regionRebuildTotal;
+  }
+
+  public long regionRebuildDeferrals() {
+    return regionRebuildDeferredTotal;
   }
 
   public record Snapshot(
@@ -321,5 +411,15 @@ public final class Stats {
       long texturedSubmitFrame,
       long lightmappedSubmitFrame,
       long verticesFrame,
-      long indicesFrame) {}
+      long indicesFrame,
+      long regionSectionCollectedTotal,
+      long regionSectionCollectedFrame,
+      long regionPageSubmitTotal,
+      long regionPageSubmitFrame,
+      long regionRebuildTotal,
+      long regionRebuildDeferredTotal,
+      long regionResidentCurrent,
+      long regionResidentPeak,
+      long regionResidentBytes,
+      long regionResidentBytesPeak) {}
 }

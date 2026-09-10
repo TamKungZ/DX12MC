@@ -11,7 +11,7 @@ import org.lwjgl.system.MemoryUtil;
 
 public final class StagingMemory {
   private static final long MAX_OUTSTANDING_BYTES =
-      Math.max(4L << 20, Long.getLong("dx12mc.staging.maxOutstandingBytes", 16L << 20));
+      Math.max(8L << 20, Long.getLong("dx12mc.staging.maxOutstandingBytes", 64L << 20));
   private static final AtomicLong OUTSTANDING = new AtomicLong();
   private static final AtomicLong PEAK = new AtomicLong();
   private static final BGFXReleaseFunctionCallbackI RELEASE =

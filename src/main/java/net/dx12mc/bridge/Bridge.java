@@ -8,6 +8,7 @@ import java.nio.ByteBuffer;
 import net.dx12mc.bridge.mesh.Batch;
 import net.dx12mc.bridge.mesh.Encoder;
 import net.dx12mc.bridge.mesh.MeshStore;
+import net.dx12mc.bridge.mesh.SectionRegionBatcher;
 import net.dx12mc.bridge.texture.Registry;
 import net.dx12mc.graphics.bgfx.Mesh;
 import net.dx12mc.graphics.bgfx.StagingBackpressureException;
@@ -17,16 +18,19 @@ import org.joml.Matrix4f;
 public final class Bridge implements AutoCloseable {
   private final Stats stats;
   private final MeshStore meshes;
+  private final SectionRegionBatcher regions;
   private final Registry textures;
   private final DrawContextFactory contexts;
   private final PipelineSet pipelines = new PipelineSet();
   private final Encoder.Scratch immediateScratch = new Encoder.Scratch();
+  private DrawContext activeSectionContext;
   private String semanticIntent = "frame";
   private boolean sectionIntent;
 
   public Bridge(Stats stats) {
     this.stats = stats;
     this.meshes = new MeshStore(stats);
+    this.regions = new SectionRegionBatcher(stats);
     this.textures = new Registry(stats);
     this.contexts = new DrawContextFactory(textures);
   }
@@ -37,6 +41,7 @@ public final class Bridge implements AutoCloseable {
   }
 
   public void capture(Slot slot, MeshData mesh, VertexBuffer.Usage usage) {
+    regions.invalidate(slot);
     meshes.capture(slot, mesh, usage, DrawContextFactory.shaderName());
   }
 
@@ -50,6 +55,17 @@ public final class Bridge implements AutoCloseable {
     if (sectionIntent && !nextSectionIntent) pipelines.endSectionLayer();
     this.sectionIntent = nextSectionIntent;
     contexts.semanticIntent(semanticIntent);
+  }
+
+  public void beginSectionLayer(
+      Object layerToken,
+      boolean regionBatchable,
+      Matrix4f layerClipTransform,
+      double cameraX,
+      double cameraY,
+      double cameraZ) {
+    activeSectionContext = null;
+    regions.begin(layerToken, regionBatchable, layerClipTransform, cameraX, cameraY, cameraZ);
   }
 
   public void bindTexture(int id) {
@@ -257,7 +273,13 @@ public final class Bridge implements AutoCloseable {
   }
 
   public boolean drawSection(
-      Slot slot, Matrix4f clipTransform, int framebufferWidth, int framebufferHeight) {
+      Slot slot,
+      Matrix4f clipTransform,
+      int framebufferWidth,
+      int framebufferHeight,
+      int originX,
+      int originY,
+      int originZ) {
     requireStarted();
     if (slot == null || slot.batch() == null) {
       throw unsupported("Section VertexBuffer draw has no captured D3D12 mesh");
@@ -274,6 +296,8 @@ public final class Bridge implements AutoCloseable {
       stats.scissorSkippedDraw();
       return true;
     }
+    activeSectionContext = context;
+    if (regions.collect(slot, batch, originX, originY, originZ)) return true;
     if (slot.dynamic()) {
       boolean success = submitTransient(batch, context);
       stats.submitted(batch, success, true, context.textured(), context.lightmapped());
@@ -315,6 +339,13 @@ public final class Bridge implements AutoCloseable {
               + DrawContextFactory.shaderName());
     }
     return true;
+  }
+
+  public void endSectionLayer() {
+    if (regions.active()) flushSectionRegions();
+    regions.end();
+    activeSectionContext = null;
+    pipelines.endSectionLayer();
   }
 
   public boolean drawImmediate(
@@ -366,6 +397,7 @@ public final class Bridge implements AutoCloseable {
   }
 
   public void onFrameBoundary() {
+    regions.onFrameBoundary();
     meshes.onFrameBoundary();
     textures.onFrameBoundary();
     stats.nativeStaging(
@@ -375,11 +407,13 @@ public final class Bridge implements AutoCloseable {
 
   public void release(Slot slot) {
     if (slot == null) return;
+    regions.invalidate(slot);
     meshes.release(slot);
   }
 
   @Override
   public void close() {
+    regions.close();
     meshes.close();
     textures.close();
     pipelines.close();
@@ -420,6 +454,51 @@ public final class Bridge implements AutoCloseable {
     }
     return pipelines.submit(
         mesh, context, contexts.matrix(), contexts.textureMatrix(), contexts.tint());
+  }
+
+  private void flushSectionRegions() {
+    if (regions.touchedCount() == 0) return;
+    if (activeSectionContext == null) {
+      throw unsupported("Section-region flush has no prepared draw context");
+    }
+    regions.prepare(pipelines.layout(), meshes);
+    DrawContext context = activeSectionContext;
+    for (int regionIndex = 0; regionIndex < regions.touchedCount(); regionIndex++) {
+      SectionRegionBatcher.Region region = regions.touched(regionIndex);
+      if (!region.ready()) {
+        submitVisibleRegionMembers(region, context);
+        continue;
+      }
+      contexts.sectionMatrix(regions.transform(region));
+      for (int pageIndex = 0; pageIndex < region.pageCount(); pageIndex++) {
+        SectionRegionBatcher.Page page = region.page(pageIndex);
+        boolean success = submitPersistent(page.mesh(), context);
+        stats.submittedRegionPage(
+            page.vertexCount(),
+            page.indexCount(),
+            success,
+            context.textured(),
+            context.lightmapped());
+        if (!success) throw unsupported("bgfx/D3D12 rejected a compiled section-region page");
+      }
+    }
+  }
+
+  private void submitVisibleRegionMembers(SectionRegionBatcher.Region region, DrawContext context) {
+    for (int memberIndex = 0; memberIndex < region.visibleCount(); memberIndex++) {
+      SectionRegionBatcher.Member member = region.visible(memberIndex);
+      contexts.sectionMatrix(regions.transform(member));
+      Batch batch = member.batch();
+      Mesh gpu = meshes.resident(member.slot(), pipelines.layout());
+      boolean transientBuffer = gpu == null || !gpu.valid();
+      boolean success =
+          transientBuffer ? submitTransient(batch, context) : submitPersistent(gpu, context);
+      if (transientBuffer) stats.nativeStreamingSpill();
+      stats.submitted(batch, success, transientBuffer, context.textured(), context.lightmapped());
+      if (!success) {
+        stats.deferredSectionDraw();
+      }
+    }
   }
 
   private void requireStarted() {

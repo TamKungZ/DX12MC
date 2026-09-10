@@ -58,7 +58,9 @@ public abstract class LevelRendererMixin {
       Matrix4f modelView,
       Matrix4f projection,
       CallbackInfo ci) {
-    DX12MC.runtime().beginSectionLayer(modelView, projection);
+    DX12MC
+        .runtime()
+        .beginSectionLayer(renderType, cameraX, cameraY, cameraZ, modelView, projection);
   }
 
   @Redirect(

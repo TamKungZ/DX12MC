@@ -18,14 +18,17 @@ class SectionRenderContextTest {
             .m32(0.5f)
             .mul(projection)
             .mul(modelView)
-            .translate(32.0f, -16.0f, 48.0f);
+            .translate(27.75f, -22.5f, 52.75f);
 
     SectionRenderContext context = new SectionRenderContext();
-    context.begin(modelView, projection, 1920, 1080);
-    context.offset(32.0f, -16.0f, 48.0f);
+    context.begin(modelView, projection, 1920, 1080, 100.25, 70.5, -20.75);
+    context.offset(27.75f, -22.5f, 52.75f);
 
     assertTrue(expected.equals(context.drawClipTransform(), 1.0e-6f));
     assertEquals(1920, context.framebufferWidth());
     assertEquals(1080, context.framebufferHeight());
+    assertEquals(128, context.originX());
+    assertEquals(48, context.originY());
+    assertEquals(32, context.originZ());
   }
 }

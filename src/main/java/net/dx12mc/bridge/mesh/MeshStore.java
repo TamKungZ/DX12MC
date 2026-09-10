@@ -129,6 +129,12 @@ public final class MeshStore implements AutoCloseable {
     slot.release();
   }
 
+  public void discardGpuCopy(Slot slot) {
+    if (slot == null) return;
+    forgetResident(slot);
+    slot.releaseGpu();
+  }
+
   public void onFrameBoundary() {
     allocationBackoff = false;
     frameBoundary++;
@@ -187,8 +193,10 @@ public final class MeshStore implements AutoCloseable {
   private void forgetResident(Slot slot) {
     if (slot == null) return;
     ResidentMesh removed = residents.remove(slot);
-    if (removed != null) residentBytes = Math.max(0L, residentBytes - removed.bytes);
-    publishResidentStats();
+    if (removed != null) {
+      residentBytes = Math.max(0L, residentBytes - removed.bytes);
+      publishResidentStats();
+    }
   }
 
   private boolean ensureCapacity(Slot incoming, long incomingBytes) {

@@ -64,6 +64,12 @@ final class NativeOverlayRenderer {
         0x0F,
         "Vertices / indices this frame: " + stats.verticesFrame() + " / " + stats.indicesFrame());
     writer.line(
+        0x0A,
+        "Opaque section draws collected / region pages this frame: "
+            + stats.regionSectionCollectedFrame()
+            + " / "
+            + stats.regionPageSubmitFrame());
+    writer.line(
         0x0F,
         "D3D12 submits total: "
             + stats.submittedTotal()
@@ -148,6 +154,24 @@ final class NativeOverlayRenderer {
             + ByteSizes.human(stats.residentMeshBytes())
             + " / "
             + ByteSizes.human(stats.residentMeshBytesPeak()));
+    writer.line(
+        0x0A,
+        "Resident terrain regions current / peak: "
+            + stats.regionResidentCurrent()
+            + " / "
+            + stats.regionResidentPeak());
+    writer.line(
+        0x0A,
+        "Resident terrain-region GPU bytes current / peak: "
+            + ByteSizes.human(stats.regionResidentBytes())
+            + " / "
+            + ByteSizes.human(stats.regionResidentBytesPeak()));
+    writer.line(
+        0x0A,
+        "Terrain-region rebuilds / pressure-deferred: "
+            + stats.regionRebuildTotal()
+            + " / "
+            + stats.regionRebuildDeferredTotal());
     writer.line(
         0x0A,
         "DX12MC CPU mesh mirror current / peak: "

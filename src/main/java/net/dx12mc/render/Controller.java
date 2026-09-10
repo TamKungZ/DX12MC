@@ -11,6 +11,7 @@ import net.dx12mc.bridge.Slot;
 import net.dx12mc.bridge.Stats;
 import net.dx12mc.config.Config;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.RenderType;
 import org.joml.Matrix4f;
 
 public final class Controller implements AutoCloseable {
@@ -243,7 +244,13 @@ public final class Controller implements AutoCloseable {
     if (bridge != null) bridge.semanticIntent(this.semanticIntent);
   }
 
-  public void beginSectionLayer(Matrix4f modelView, Matrix4f projection) {
+  public void beginSectionLayer(
+      RenderType renderType,
+      double cameraX,
+      double cameraY,
+      double cameraZ,
+      Matrix4f modelView,
+      Matrix4f projection) {
     if (!config.nativeMode()) return;
     throwIfFailed();
     if (modelView == null || projection == null) {
@@ -254,9 +261,23 @@ public final class Controller implements AutoCloseable {
     lifecycle.requireActive("section-layer draw");
     lifecycle.ensureFrame(minecraft);
     Window window = minecraft.getWindow();
-    section.begin(modelView, projection, window.getWidth(), window.getHeight());
+    section.begin(
+        modelView, projection, window.getWidth(), window.getHeight(), cameraX, cameraY, cameraZ);
     this.semanticIntent = "level.section-layer";
     if (bridge != null) bridge.semanticIntent(this.semanticIntent);
+    if (bridge != null) {
+      boolean regionBatchable =
+          renderType == RenderType.solid()
+              || renderType == RenderType.cutout()
+              || renderType == RenderType.cutoutMipped();
+      bridge.beginSectionLayer(
+          renderType,
+          regionBatchable,
+          section.layerClipTransform(),
+          section.cameraX(),
+          section.cameraY(),
+          section.cameraZ());
+    }
   }
 
   public void sectionChunkOffset(float x, float y, float z) {
@@ -274,7 +295,10 @@ public final class Controller implements AutoCloseable {
           slot,
           section.drawClipTransform(),
           section.framebufferWidth(),
-          section.framebufferHeight())) {
+          section.framebufferHeight(),
+          section.originX(),
+          section.originY(),
+          section.originZ())) {
         throw new IllegalStateException("D3D12 bridge returned no section submission");
       }
       stats.cancelledVanillaDraw();
@@ -292,6 +316,7 @@ public final class Controller implements AutoCloseable {
   }
 
   public void endSectionLayer() {
+    if (bridge != null && section.active()) bridge.endSectionLayer();
     section.end();
     this.semanticIntent = "frame";
     if (bridge != null) bridge.semanticIntent(this.semanticIntent);
