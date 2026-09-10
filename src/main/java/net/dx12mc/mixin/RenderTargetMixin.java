@@ -10,6 +10,21 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(RenderTarget.class)
 public abstract class RenderTargetMixin {
 
+  @Inject(method = "bindWrite(Z)V", at = @At("HEAD"), cancellable = true)
+  private void dx12mc$suppressLegacyBindWrite(boolean viewport, CallbackInfo ci) {
+    if (DX12MC.runtime().suppressLegacyOpenGlDriverWork()) ci.cancel();
+  }
+
+  @Inject(method = "unbindWrite()V", at = @At("HEAD"), cancellable = true)
+  private void dx12mc$suppressLegacyUnbindWrite(CallbackInfo ci) {
+    if (DX12MC.runtime().suppressLegacyOpenGlDriverWork()) ci.cancel();
+  }
+
+  @Inject(method = "clear(Z)V", at = @At("HEAD"), cancellable = true)
+  private void dx12mc$suppressLegacyClear(boolean checkError, CallbackInfo ci) {
+    if (DX12MC.runtime().suppressLegacyOpenGlDriverWork()) ci.cancel();
+  }
+
   @Inject(method = "blitToScreen(IIZ)V", at = @At("HEAD"), cancellable = true)
   private void dx12mc$suppressLegacyScreenBlit(
       int width, int height, boolean disableBlend, CallbackInfo ci) {

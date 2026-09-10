@@ -369,6 +369,10 @@ public final class Controller implements AutoCloseable {
     return true;
   }
 
+  public boolean suppressLegacyOpenGlDriverWork() {
+    return config.nativeMode() && lifecycle.active();
+  }
+
   public boolean suppressLegacyBlurPostProcess() {
     if (config.probeMode()) return false;
     throwIfFailed();

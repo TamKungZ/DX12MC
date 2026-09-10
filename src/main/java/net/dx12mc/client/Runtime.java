@@ -200,6 +200,10 @@ public final class Runtime implements AutoCloseable {
     return controller.suppressVanillaFramebufferBlit();
   }
 
+  public boolean suppressLegacyOpenGlDriverWork() {
+    return controller.suppressLegacyOpenGlDriverWork();
+  }
+
   public boolean suppressLegacyBlurPostProcess() {
     return controller.suppressLegacyBlurPostProcess();
   }

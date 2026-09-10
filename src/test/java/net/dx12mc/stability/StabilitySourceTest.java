@@ -71,7 +71,11 @@ class StabilitySourceTest {
     String mixins = Files.readString(Path.of("src", "main", "resources", "dx12mc.mixins.json"));
     assertTrue(target.contains("@Mixin(RenderTarget.class)"));
     assertTrue(target.contains("blitToScreen(IIZ)V"));
+    assertTrue(target.contains("bindWrite(Z)V"));
+    assertTrue(target.contains("unbindWrite()V"));
+    assertTrue(target.contains("clear(Z)V"));
     assertTrue(target.contains("suppressVanillaFramebufferBlit()"));
+    assertTrue(target.contains("suppressLegacyOpenGlDriverWork()"));
     assertTrue(target.contains("ci.cancel()"));
     assertTrue(controller.contains("state != State.ACTIVE"));
     assertTrue(controller.contains("suppressedOpenGlFramebufferBlit()"));
@@ -188,6 +192,8 @@ class StabilitySourceTest {
     assertTrue(glState.contains("_polygonMode(II)V"));
     assertTrue(glState.contains("_enableColorLogicOp()V"));
     assertTrue(glState.contains("_logicOp(I)V"));
+    assertTrue(glState.contains("dx12mc$suppressLegacyState(ci)"));
+    assertTrue(glState.contains("suppressLegacyOpenGlDriverWork()"));
     assertTrue(bridge.contains("renderState.snapshot(width, height)"));
     assertTrue(color.contains("bgfx_set_state(state.bgfxState(), 0)"));
     assertTrue(texture.contains("bgfx_set_state(state.bgfxState(), 0)"));

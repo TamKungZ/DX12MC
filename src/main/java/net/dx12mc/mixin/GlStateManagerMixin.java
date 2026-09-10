@@ -62,116 +62,142 @@ public abstract class GlStateManagerMixin {
     if (DX12MC.runtime().suppressLegacyVertexBufferStorage(target, size)) ci.cancel();
   }
 
-  @Inject(method = "_enableDepthTest()V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_enableDepthTest()V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$enableDepth(CallbackInfo ci) {
     DX12MC.runtime().depthTest(true);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_disableDepthTest()V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_disableDepthTest()V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$disableDepth(CallbackInfo ci) {
     DX12MC.runtime().depthTest(false);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_depthFunc(I)V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_depthFunc(I)V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$depthFunc(int func, CallbackInfo ci) {
     DX12MC.runtime().depthFunc(func);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_depthMask(Z)V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_depthMask(Z)V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$depthMask(boolean write, CallbackInfo ci) {
     DX12MC.runtime().depthMask(write);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_enableBlend()V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_enableBlend()V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$enableBlend(CallbackInfo ci) {
     DX12MC.runtime().blend(true);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_disableBlend()V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_disableBlend()V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$disableBlend(CallbackInfo ci) {
     DX12MC.runtime().blend(false);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_blendFunc(II)V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_blendFunc(II)V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$blendFunc(int src, int dst, CallbackInfo ci) {
     DX12MC.runtime().blendFunc(src, dst);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_blendFuncSeparate(IIII)V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_blendFuncSeparate(IIII)V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$blendFuncSeparate(
       int srcRgb, int dstRgb, int srcAlpha, int dstAlpha, CallbackInfo ci) {
     DX12MC.runtime().blendFuncSeparate(srcRgb, dstRgb, srcAlpha, dstAlpha);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_blendEquation(I)V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_blendEquation(I)V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$blendEquation(int equation, CallbackInfo ci) {
     DX12MC.runtime().blendEquation(equation);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_enableCull()V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_enableCull()V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$enableCull(CallbackInfo ci) {
     DX12MC.runtime().cull(true);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_disableCull()V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_disableCull()V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$disableCull(CallbackInfo ci) {
     DX12MC.runtime().cull(false);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_colorMask(ZZZZ)V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_colorMask(ZZZZ)V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$colorMask(
       boolean red, boolean green, boolean blue, boolean alpha, CallbackInfo ci) {
     DX12MC.runtime().colorMask(red, green, blue, alpha);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_enableScissorTest()V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_enableScissorTest()V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$enableScissor(CallbackInfo ci) {
     DX12MC.runtime().scissor(true);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_disableScissorTest()V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_disableScissorTest()V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$disableScissor(CallbackInfo ci) {
     DX12MC.runtime().scissor(false);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_scissorBox(IIII)V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_scissorBox(IIII)V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$scissorBox(int x, int y, int width, int height, CallbackInfo ci) {
     DX12MC.runtime().scissorBox(x, y, width, height);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_enablePolygonOffset()V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_enablePolygonOffset()V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$enablePolygonOffset(CallbackInfo ci) {
     DX12MC.runtime().polygonOffset(true);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_disablePolygonOffset()V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_disablePolygonOffset()V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$disablePolygonOffset(CallbackInfo ci) {
     DX12MC.runtime().polygonOffset(false);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_polygonOffset(FF)V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_polygonOffset(FF)V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$polygonOffset(float factor, float units, CallbackInfo ci) {
     DX12MC.runtime().polygonOffset(factor, units);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_polygonMode(II)V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_polygonMode(II)V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$polygonMode(int face, int mode, CallbackInfo ci) {
     DX12MC.runtime().polygonMode(face, mode);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_enableColorLogicOp()V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_enableColorLogicOp()V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$enableColorLogic(CallbackInfo ci) {
     DX12MC.runtime().colorLogic(true);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_disableColorLogicOp()V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_disableColorLogicOp()V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$disableColorLogic(CallbackInfo ci) {
     DX12MC.runtime().colorLogic(false);
+    dx12mc$suppressLegacyState(ci);
   }
 
-  @Inject(method = "_logicOp(I)V", at = @At("HEAD"), remap = false)
+  @Inject(method = "_logicOp(I)V", at = @At("HEAD"), remap = false, cancellable = true)
   private static void dx12mc$logicOp(int op, CallbackInfo ci) {
     DX12MC.runtime().logicOp(op);
+    dx12mc$suppressLegacyState(ci);
+  }
+
+  private static void dx12mc$suppressLegacyState(CallbackInfo ci) {
+    if (DX12MC.runtime().suppressLegacyOpenGlDriverWork()) ci.cancel();
   }
 
   @Inject(method = "_drawElements(IIIJ)V", at = @At("HEAD"), remap = false)
