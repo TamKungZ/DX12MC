@@ -345,6 +345,7 @@ tasks.register<JavaExec>("formatJava") {
     description = "Formats Java source files with google-java-format."
     classpath = javaFormatter
     mainClass.set("com.google.googlejavaformat.java.Main")
+    maxHeapSize = "128m"
     jvmArgs(googleJavaFormatJvmArgs)
     args("--replace")
     args(javaSourceFiles())
@@ -355,6 +356,7 @@ tasks.register<JavaExec>("checkJavaFormat") {
     description = "Checks Java source formatting with google-java-format."
     classpath = javaFormatter
     mainClass.set("com.google.googlejavaformat.java.Main")
+    maxHeapSize = "128m"
     jvmArgs(googleJavaFormatJvmArgs)
     args("--dry-run", "--set-exit-if-changed")
     args(javaSourceFiles())
