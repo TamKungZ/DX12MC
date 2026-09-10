@@ -2,6 +2,23 @@
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
+## 0.8.15 - Remove duplicate OpenGL frame work
+
+- Stop binding, viewport-setting and clearing Minecraft's unused OpenGL render target after D3D12 takes ownership of presentation.
+- Suppress mirrored fixed-function OpenGL driver changes after recording their D3D12 state, removing duplicate per-frame GL calls from the native path.
+- Constrain terrain regions to one vertical section so surface rendering cannot pull hidden underground or ocean geometry into a visible region draw.
+- Emit a compact five-second performance sample to `latest.log`, including actual presented FPS, native submissions, geometry, region efficiency and bgfx CPU/GPU/wait timing.
+- Translate Minecraft polygon offset to a native shader depth bias so block-overlay rendering no longer terminates strict native mode.
+
+## 0.8.14 - Compiled-terrain region batching
+
+- Combine nearby solid and cutout compiled sections into bounded persistent region pages, replacing hundreds of per-section D3D12 submissions with a much smaller set while preserving translucent section ordering.
+- Rebuild dirty regions once per render-layer pass and retain clean pages across frames, with pressure-safe fallback to the original visible section submissions.
+- Drop redundant per-section GPU copies after a region becomes resident, while retaining CPU mirrors for chunk updates and recovery without doubling terrain VRAM.
+- Protect regions used in the current or previous frame from cross-layer LRU churn and size the entry cache to cover the tested render distance; enforce a separate 256 MiB resident-byte bound.
+- Raise the bounded native staging allowance from 16 MiB to 64 MiB so several region pages can upload during rapid flight without unnecessary one-frame deferrals.
+- Add terrain-region collection, page-submission, rebuild, deferral, residency and GPU-byte counters to the optional native diagnostics overlay.
+
 ## 0.8.13 - Immediate-draw frame-pacing cleanup
 
 - Reuse growable CPU attribute and index buffers for immediate entity, particle, weather, text and GUI geometry instead of allocating and discarding up to seven large primitive arrays for every draw.
