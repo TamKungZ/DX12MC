@@ -1,6 +1,22 @@
 # Changelog
 
+Note: 0.9.0 is the version that fixes the low FPS problem. On a GT1030 it performs on par with vanilla and is playable, based on in-game testing.
+
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
+
+## 0.9.0 - Low FPS fix
+
+Combines the 0.8.17 and 0.8.18 changes as released together.
+
+- Merge dirty texture regions per mip level before upload, so animated atlas sprites no longer issue many bgfx texture updates per frame.
+- Build region pages with one vertex buffer and a shared quad index buffer, and draw either a whole page or only the visible index ranges of its sections, whichever costs less.
+- Limit region rebuilds (6 per frame), resident section mesh creations (4 per frame) and sorted translucent GPU index updates (4 per frame).
+- Regions waiting for a rebuild keep drawing their previous page. Sections added since then are streamed within a per-frame byte budget, and a transient draw that does not fit is skipped for that frame instead of ending the game.
+- Skip, instead of failing, a draw that samples a texture that has been allocated but has not received pixels yet. A missing texture still fails and reports the mirror state and recent deletions.
+- Raise the bgfx transient buffer limits to 24 MiB vertex and 8 MiB index.
+- Pin the shaderc download to a SHA-256 and fail the build on a mismatch.
+- Average bgfx timings over each PERF interval and report texture updates and skipped draws in the PERF log line.
+- Add `renderBench` and `cpuBench` Gradle tasks for local diagnostics. They are not part of the mod jar.
 
 ## 0.8.18 - Crash fixes for transient exhaustion and unready textures
 
