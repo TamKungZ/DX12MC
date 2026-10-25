@@ -14,6 +14,7 @@ import org.joml.Matrix4f;
 import org.lwjgl.bgfx.BGFXVertexLayout;
 
 public final class SectionRegionBatcher implements AutoCloseable {
+  private static final int RUN_FIELDS = 4;
   private static final float[] EMPTY_FLOATS = new float[0];
   private static final short[] EMPTY_SHORTS = new short[0];
   private static final byte[] EMPTY_BYTES = new byte[0];
@@ -109,6 +110,7 @@ public final class SectionRegionBatcher implements AutoCloseable {
       member.originZ = originZ;
       region.dirty = true;
     }
+    member.visibleStamp = pass;
     region.visible.add(member);
     stats.regionSectionCollected();
     return true;
@@ -191,6 +193,13 @@ public final class SectionRegionBatcher implements AutoCloseable {
         Batch combined =
             assembler.assemble(
                 region.members, start, end, region.key.x, region.key.y, region.key.z);
+        int firstIndex = 0;
+        for (int i = start; i < end; i++) {
+          Member member = region.members.get(i);
+          member.pageIndex = fresh.size();
+          member.firstIndex = firstIndex;
+          firstIndex += member.batch.indexCount();
+        }
         Mesh mesh = Mesh.create(combined, layout);
         fresh.add(new Page(mesh, combined.vertexCount(), combined.indexCount()));
         start = end;
@@ -332,6 +341,7 @@ public final class SectionRegionBatcher implements AutoCloseable {
     private final ArrayList<Member> members = new ArrayList<>();
     private final ArrayList<Member> visible = new ArrayList<>();
     private ArrayList<Page> pages = new ArrayList<>();
+    private int[] runs = new int[RUN_FIELDS * 8];
     private boolean dirty = true;
     private long visiblePass = Long.MIN_VALUE;
     private long lastUsedFrame;
@@ -363,6 +373,51 @@ public final class SectionRegionBatcher implements AutoCloseable {
       return visible.size();
     }
 
+    public int visibleRuns() {
+      int count = 0;
+      Member previous = null;
+      for (Member member : members) {
+        if (member.visibleStamp != visiblePass) {
+          previous = null;
+          continue;
+        }
+        if (previous == null
+            || previous.pageIndex != member.pageIndex
+            || previous.firstIndex + previous.batch.indexCount() != member.firstIndex) {
+          if (runs.length < (count + 1) * RUN_FIELDS) {
+            runs = Arrays.copyOf(runs, runs.length * 2);
+          }
+          int base = count * RUN_FIELDS;
+          runs[base] = member.pageIndex;
+          runs[base + 1] = member.firstIndex;
+          runs[base + 2] = 0;
+          runs[base + 3] = 0;
+          count++;
+        }
+        int base = (count - 1) * RUN_FIELDS;
+        runs[base + 2] += member.batch.indexCount();
+        runs[base + 3] += member.batch.vertexCount();
+        previous = member;
+      }
+      return count;
+    }
+
+    public int runPage(int run) {
+      return runs[run * RUN_FIELDS];
+    }
+
+    public int runFirstIndex(int run) {
+      return runs[run * RUN_FIELDS + 1];
+    }
+
+    public int runIndexCount(int run) {
+      return runs[run * RUN_FIELDS + 2];
+    }
+
+    public int runVertexCount(int run) {
+      return runs[run * RUN_FIELDS + 3];
+    }
+
     public Member visible(int index) {
       return visible.get(index);
     }
@@ -374,6 +429,9 @@ public final class SectionRegionBatcher implements AutoCloseable {
     private int originX;
     private int originY;
     private int originZ;
+    private int pageIndex;
+    private int firstIndex;
+    private long visibleStamp = Long.MIN_VALUE;
 
     Member(Slot slot, Batch batch, int originX, int originY, int originZ) {
       this.slot = slot;
