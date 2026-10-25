@@ -2,6 +2,18 @@
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
+## 0.8.17 - Render-thread stall fixes
+
+- Coalesce dirty texture regions per mip level before upload. Each bgfx texture update costs about 0.27 ms on the render thread regardless of size, so animated atlas sprites previously issued 100 or more updates per frame. Tune with `dx12mc.texture.updateCallCostPixels`.
+- Draw a whole region page when most of it is visible and only the visible index ranges when most of it is hidden, using a draw-call cost model. Tune with `dx12mc.region.drawCostIndices`.
+- Limit terrain region rebuilds (`dx12mc.region.rebuildsPerFrame`, default 4) and resident section mesh creations (`dx12mc.mesh.createsPerFrame`, default 4) per frame. Regions waiting for a rebuild stream their visible sections through transient buffers instead of creating per-section GPU copies.
+- Build region pages with one vertex buffer and a shared quad index buffer, replacing a per-page index buffer. Page creation is about 2.8 times cheaper in the benchmark.
+- Raise bgfx transient buffer limits to 24 MiB vertex and 8 MiB index (`dx12mc.transient.vertexMiB`, `dx12mc.transient.indexMiB`).
+- Average bgfx timings over each PERF interval and report texture updates per frame in the PERF log line.
+- Pin the shaderc download to a SHA-256 and fail the build on a mismatch.
+- Log failures while releasing native bridge resources at warn level instead of debug.
+- Add `renderBench` and `cpuBench` Gradle tasks that measure bgfx submission and CPU-side mesh paths on the local machine.
+
 ## 0.8.16 - Region culling and shutdown hardening
 
 - Close every bridge resource during shutdown even if one close fails, so a single error no longer leaks the remaining native handles.
