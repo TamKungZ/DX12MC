@@ -24,6 +24,8 @@ public final class MeshStore implements AutoCloseable {
 
   private static final int MAX_CREATES_PER_FRAME =
       Math.max(1, Integer.getInteger("dx12mc.mesh.createsPerFrame", 4));
+  private static final int MAX_INDEX_UPDATES_PER_FRAME =
+      Math.max(1, Integer.getInteger("dx12mc.mesh.indexUpdatesPerFrame", 4));
 
   private final Stats stats;
   private final Set<Slot> slots = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -32,7 +34,8 @@ public final class MeshStore implements AutoCloseable {
   private long cpuBytes;
   private long frameBoundary;
   private boolean allocationBackoff;
-  private int createdThisFrame;
+  private final FrameBudget creates = new FrameBudget(MAX_CREATES_PER_FRAME);
+  private final FrameBudget indexUpdates = new FrameBudget(MAX_INDEX_UPDATES_PER_FRAME);
 
   public MeshStore(Stats stats) {
     this.stats = stats;
@@ -105,14 +108,14 @@ public final class MeshStore implements AutoCloseable {
       touch(slot);
       return gpu;
     }
-    if (createdThisFrame >= MAX_CREATES_PER_FRAME) return null;
+    if (creates.exhausted()) return null;
     if (allocationBackoff || !ensureCapacity(slot, Mesh.estimatedBytes(slot.batch()))) {
       allocationBackoff = true;
       return null;
     }
     try {
       gpu = Mesh.create(slot.batch(), layout);
-      createdThisFrame++;
+      creates.tryTake();
       slot.mesh(gpu);
       touch(slot);
       return gpu;
@@ -143,7 +146,8 @@ public final class MeshStore implements AutoCloseable {
 
   public void onFrameBoundary() {
     allocationBackoff = false;
-    createdThisFrame = 0;
+    creates.reset();
+    indexUpdates.reset();
     frameBoundary++;
   }
 
@@ -162,6 +166,10 @@ public final class MeshStore implements AutoCloseable {
 
   private Mesh syncIndices(Slot slot, Mesh gpu) {
     if (gpu == null || !gpu.valid() || !slot.indicesDirty()) return gpu;
+    if (!indexUpdates.tryTake()) {
+      stats.deferredGpuIndexUpdate();
+      return gpu;
+    }
     try {
       gpu.updateIndices(slot.batch());
       slot.indicesUploaded();
