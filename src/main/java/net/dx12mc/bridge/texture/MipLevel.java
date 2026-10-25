@@ -65,6 +65,44 @@ final class MipLevel {
     if (dirtyRegions.size() > MAX_DIRTY_REGIONS) mergeAllDirtyRegions();
   }
 
+  static List<DirtyRegion> coalesce(List<DirtyRegion> regions, long callCostPixels) {
+    ArrayList<DirtyRegion> merged = new ArrayList<>(regions);
+    while (merged.size() > 1) {
+      int bestFirst = -1;
+      int bestSecond = -1;
+      long bestSaving = 0L;
+      for (int i = 0; i < merged.size(); i++) {
+        DirtyRegion first = merged.get(i);
+        for (int j = i + 1; j < merged.size(); j++) {
+          DirtyRegion second = merged.get(j);
+          long saving = callCostPixels + first.area() + second.area() - first.union(second).area();
+          if (saving > bestSaving) {
+            bestSaving = saving;
+            bestFirst = i;
+            bestSecond = j;
+          }
+        }
+      }
+      if (bestFirst < 0) break;
+      DirtyRegion union = merged.get(bestFirst).union(merged.get(bestSecond));
+      merged.remove(bestSecond);
+      merged.set(bestFirst, union);
+    }
+    if (merged.size() > 1) {
+      DirtyRegion bounds = merged.get(0);
+      long cost = 0L;
+      for (DirtyRegion region : merged) {
+        bounds = bounds.union(region);
+        cost += callCostPixels + region.area();
+      }
+      if (callCostPixels + bounds.area() <= cost) {
+        merged.clear();
+        merged.add(bounds);
+      }
+    }
+    return merged;
+  }
+
   private void mergeAllDirtyRegions() {
     DirtyRegion merged = dirtyRegions.get(0);
     for (int i = 1; i < dirtyRegions.size(); i++) merged = merged.union(dirtyRegions.get(i));
@@ -73,6 +111,10 @@ final class MipLevel {
   }
 
   record DirtyRegion(int minX, int minY, int maxX, int maxY) {
+    long area() {
+      return (long) (maxX - minX) * (maxY - minY);
+    }
+
     boolean touches(DirtyRegion other) {
       return minX <= other.maxX + 1
           && maxX + 1 >= other.minX
