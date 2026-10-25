@@ -10,12 +10,17 @@ import net.dx12mc.bridge.mesh.Encoder;
 import net.dx12mc.bridge.mesh.MeshStore;
 import net.dx12mc.bridge.mesh.SectionRegionBatcher;
 import net.dx12mc.bridge.texture.Registry;
+import net.dx12mc.bridge.texture.TextureNotReadyException;
 import net.dx12mc.graphics.bgfx.Mesh;
+import net.dx12mc.graphics.bgfx.Packing;
 import net.dx12mc.graphics.bgfx.StagingBackpressureException;
+import net.dx12mc.graphics.bgfx.TransientPressure;
 import net.dx12mc.graphics.pipeline.PipelineSet;
 import org.joml.Matrix4f;
 
 public final class Bridge implements AutoCloseable {
+  private static final long STREAM_BYTES_PER_FRAME =
+      Math.max(1L << 20, Long.getLong("dx12mc.stream.bytesPerFrame", 6L << 20));
   private final Stats stats;
   private final MeshStore meshes;
   private final SectionRegionBatcher regions;
@@ -26,6 +31,7 @@ public final class Bridge implements AutoCloseable {
   private DrawContext activeSectionContext;
   private String semanticIntent = "frame";
   private boolean sectionIntent;
+  private long streamedBytesThisFrame;
 
   public Bridge(Stats stats) {
     this.stats = stats;
@@ -220,6 +226,9 @@ public final class Bridge implements AutoCloseable {
     } catch (StagingBackpressureException pressure) {
       if (sectionIntent) stats.deferredSectionDraw();
       return true;
+    } catch (TextureNotReadyException notReady) {
+      stats.textureNotReadyDraw();
+      return true;
     }
     if (context.state().scissorEmpty()) {
       stats.scissorSkippedDraw();
@@ -289,6 +298,10 @@ public final class Bridge implements AutoCloseable {
     try {
       context = contexts.createSection(batch, clipTransform, framebufferWidth, framebufferHeight);
     } catch (StagingBackpressureException pressure) {
+      stats.deferredSectionDraw();
+      return true;
+    } catch (TextureNotReadyException notReady) {
+      stats.textureNotReadyDraw();
       stats.deferredSectionDraw();
       return true;
     }
@@ -373,6 +386,9 @@ public final class Bridge implements AutoCloseable {
       context = contextImmediate(batch, modelView, projection, framebufferWidth, framebufferHeight);
     } catch (StagingBackpressureException pressure) {
       return true;
+    } catch (TextureNotReadyException notReady) {
+      stats.textureNotReadyDraw();
+      return true;
     }
     if (context.state().scissorEmpty()) {
       stats.scissorSkippedDraw();
@@ -397,6 +413,7 @@ public final class Bridge implements AutoCloseable {
   }
 
   public void onFrameBoundary() {
+    streamedBytesThisFrame = 0L;
     regions.onFrameBoundary();
     meshes.onFrameBoundary();
     textures.onFrameBoundary();
@@ -445,12 +462,22 @@ public final class Bridge implements AutoCloseable {
   }
 
   private boolean submitTransient(Batch batch, DrawContext context) {
-    if (sectionIntent) {
-      return pipelines.submitSection(
-          batch, context, contexts.matrix(), contexts.textureMatrix(), contexts.tint());
+    boolean submitted =
+        sectionIntent
+            ? pipelines.submitSection(
+                batch, context, contexts.matrix(), contexts.textureMatrix(), contexts.tint())
+            : pipelines.submit(
+                batch, context, contexts.matrix(), contexts.textureMatrix(), contexts.tint());
+    if (!submitted && transientExhausted(batch)) {
+      stats.transientPressureDraw();
+      return true;
     }
-    return pipelines.submit(
-        batch, context, contexts.matrix(), contexts.textureMatrix(), contexts.tint());
+    return submitted;
+  }
+
+  private boolean transientExhausted(Batch batch) {
+    return TransientPressure.insufficient(
+        pipelines.layout(), batch.vertexCount(), batch.indexCount(), Packing.index32(batch));
   }
 
   private boolean submitPersistent(Mesh mesh, DrawContext context) {
@@ -471,10 +498,6 @@ public final class Bridge implements AutoCloseable {
     DrawContext context = activeSectionContext;
     for (int regionIndex = 0; regionIndex < regions.touchedCount(); regionIndex++) {
       SectionRegionBatcher.Region region = regions.touched(regionIndex);
-      if (!region.ready()) {
-        submitVisibleRegionMembers(region, context);
-        continue;
-      }
       contexts.sectionMatrix(regions.transform(region));
       int runs = region.visibleRuns();
       for (int run = 0; run < runs; run++) {
@@ -496,21 +519,26 @@ public final class Bridge implements AutoCloseable {
             context.lightmapped());
         if (!success) throw unsupported("bgfx/D3D12 rejected a compiled section-region page");
       }
+      int pending = region.unbuiltVisible();
+      for (int index = 0; index < pending; index++) {
+        streamRegionMember(region.unbuilt(index), context);
+      }
     }
   }
 
-  private void submitVisibleRegionMembers(SectionRegionBatcher.Region region, DrawContext context) {
-    for (int memberIndex = 0; memberIndex < region.visibleCount(); memberIndex++) {
-      SectionRegionBatcher.Member member = region.visible(memberIndex);
-      contexts.sectionMatrix(regions.transform(member));
-      Batch batch = member.batch();
-      boolean success = submitTransient(batch, context);
-      stats.nativeStreamingSpill();
-      stats.submitted(batch, success, true, context.textured(), context.lightmapped());
-      if (!success) {
-        stats.deferredSectionDraw();
-      }
+  private void streamRegionMember(SectionRegionBatcher.Member member, DrawContext context) {
+    Batch batch = member.batch();
+    long bytes = Mesh.estimatedBytes(batch);
+    if (streamedBytesThisFrame + bytes > STREAM_BYTES_PER_FRAME) {
+      stats.deferredSectionDraw();
+      return;
     }
+    streamedBytesThisFrame += bytes;
+    contexts.sectionMatrix(regions.transform(member));
+    boolean success = submitTransient(batch, context);
+    stats.nativeStreamingSpill();
+    stats.submitted(batch, success, true, context.textured(), context.lightmapped());
+    if (!success) throw unsupported("bgfx/D3D12 rejected a streamed section-region member");
   }
 
   private void requireStarted() {
