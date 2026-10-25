@@ -1,4 +1,5 @@
 import java.net.URI
+import java.security.MessageDigest
 import java.util.Locale
 
 plugins {
@@ -47,6 +48,10 @@ val shadercCache = File(
     "caches/dx12mc/bgfx-$lwjglVersion/windows-x64/shaderc.exe"
 )
 
+val shadercSha256ByLwjglVersion = mapOf(
+    "3.3.3" to "aa25dea6e9598018e7ad53af2b19bf1710fb91548ca63d6038be031b2b7ab1bb"
+)
+
 val shaderSourceDir = layout.projectDirectory.dir("src/main/shaders")
 val generatedShaderRoot = layout.buildDirectory.dir("generated/dx12mc-shaders")
 val generatedShaderDir = generatedShaderRoot.map { it.dir("assets/dx12mc/shaders/d3d12") }
@@ -73,7 +78,36 @@ val prepareShaderc by tasks.registering {
                 input.read() == 'M'.code && input.read() == 'Z'.code
             }
         }
-        if (looksExecutable(shadercCache)) return@doLast
+        val expectedSha256 = shadercSha256ByLwjglVersion[lwjglVersion]
+            ?: throw GradleException(
+                "No pinned SHA-256 for bgfx shaderc $lwjglVersion. " +
+                    "Add it to shadercSha256ByLwjglVersion in build.gradle.kts."
+            )
+        fun sha256(file: File): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { input ->
+                val buffer = ByteArray(1 shl 16)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            return digest.digest().joinToString("") { "%02x".format(it) }
+        }
+        fun requirePinned(file: File, origin: String) {
+            val actual = sha256(file)
+            if (!actual.equals(expectedSha256, ignoreCase = true)) {
+                throw GradleException(
+                    "shaderc from $origin does not match the pinned SHA-256 for LWJGL $lwjglVersion.\n" +
+                        "  expected: $expectedSha256\n" +
+                        "  actual:   $actual"
+                )
+            }
+        }
+        if (looksExecutable(shadercCache) && sha256(shadercCache).equals(expectedSha256, ignoreCase = true)) {
+            return@doLast
+        }
         shadercCache.delete()
         shadercCache.parentFile.mkdirs()
         val overridePath = providers.environmentVariable("DX12MC_SHADERC").orNull
@@ -82,6 +116,7 @@ val prepareShaderc by tasks.registering {
             if (!looksExecutable(source)) {
                 throw GradleException("DX12MC_SHADERC is not a usable Windows shaderc executable: $source")
             }
+            requirePinned(source, "DX12MC_SHADERC ($source)")
             source.copyTo(shadercCache, overwrite = true)
             logger.lifecycle("DX12MC: cached shaderc from DX12MC_SHADERC -> $shadercCache")
             return@doLast
@@ -94,8 +129,7 @@ val prepareShaderc by tasks.registering {
             )
         }
         val candidates = listOf(
-            "https://build.lwjgl.org/release/$lwjglVersion/windows/x64/bgfx-tools/shaderc.exe",
-            "https://build.lwjgl.org/release/$lwjglVersion/windows/x64/bgfx-tools/shadercRelease.exe"
+            "https://build.lwjgl.org/release/$lwjglVersion/windows/x64/bgfx-tools/shaderc.exe"
         )
         val temp = File(shadercCache.parentFile, "shaderc.download")
         var lastError: Throwable? = null
@@ -108,6 +142,7 @@ val prepareShaderc by tasks.registering {
                 if (!looksExecutable(temp)) {
                     throw GradleException("Downloaded shaderc is not a PE executable: $candidate")
                 }
+                requirePinned(temp, candidate)
                 temp.copyTo(shadercCache, overwrite = true)
                 temp.delete()
                 lastError = null
@@ -119,7 +154,7 @@ val prepareShaderc by tasks.registering {
         }
         if (!looksExecutable(shadercCache)) {
             throw GradleException(
-                "Unable to obtain bgfx shaderc $lwjglVersion. " +
+                "Unable to obtain bgfx shaderc $lwjglVersion matching the pinned SHA-256. " +
                     "Download it from LWJGL bgfx-tools and set DX12MC_SHADERC.",
                 lastError
             )
@@ -382,6 +417,26 @@ tasks.register<JavaExec>("checkJavaFormat") {
 
 tasks.test {
     useJUnitPlatform()
+}
+
+tasks.register<JavaExec>("cpuBench") {
+    group = "verification"
+    description = "Times the CPU-side mesh encoding, packing and region assembly paths."
+    dependsOn("testClasses")
+    classpath = files(sourceSets["test"].runtimeClasspath)
+    mainClass.set("net.dx12mc.bridge.mesh.CpuBench")
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+}
+
+tasks.register<JavaExec>("renderBench") {
+    group = "verification"
+    description = "Measures bgfx D3D12 submission cost on the local GPU with synthetic terrain meshes."
+    dependsOn(verifyD3D12Shaders, "testClasses")
+    classpath = files(sourceSets["test"].runtimeClasspath, generatedShaderRoot)
+    mainClass.set("net.dx12mc.bridge.RenderBench")
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    jvmArgs(providers.gradleProperty("benchJvm").orElse("").get().split(" ").filter { it.isNotEmpty() })
+    args(providers.gradleProperty("benchArgs").orElse("").get().split(" ").filter { it.isNotEmpty() })
 }
 
 tasks.named("check") {
