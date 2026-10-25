@@ -7,6 +7,8 @@ import java.util.List;
 public final class Image {
   private static final int MAX_DIMENSION =
       Integer.getInteger("dx12mc.texture.maxDimension", 16_384);
+  private static final long UPDATE_CALL_COST_PIXELS =
+      Math.max(0L, Long.getLong("dx12mc.texture.updateCallCostPixels", 131_072L));
   private static final long MAX_BYTES_PER_TEXTURE =
       Long.getLong("dx12mc.texture.maxBytes", 256L * 1024L * 1024L);
   private int width;
@@ -173,7 +175,8 @@ public final class Image {
     for (int level = 0; level <= maxLevel; level++) {
       MipLevel source = levels[level];
       if (source.dirtyRegions().isEmpty() || !source.hasPixels()) continue;
-      for (MipLevel.DirtyRegion dirty : source.dirtyRegions()) {
+      for (MipLevel.DirtyRegion dirty :
+          MipLevel.coalesce(source.dirtyRegions(), UPDATE_CALL_COST_PIXELS)) {
         uploads.add(
             new Upload(
                 level,
