@@ -223,7 +223,7 @@ final class RendererLifecycle implements AutoCloseable {
     try {
       bridge.close();
     } catch (Throwable throwable) {
-      DX12MC.LOGGER.debug("Error while releasing native bridge resources", throwable);
+      DX12MC.LOGGER.warn("Error while releasing native bridge resources", throwable);
     }
   }
 
