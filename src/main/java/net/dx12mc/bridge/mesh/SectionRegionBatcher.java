@@ -26,7 +26,7 @@ public final class SectionRegionBatcher implements AutoCloseable {
   private static final long MAX_RESIDENT_BYTES =
       Math.max(64L << 20, Long.getLong("dx12mc.region.cache.bytes", 256L << 20));
   private static final int MAX_REBUILDS_PER_FRAME =
-      Math.max(1, Integer.getInteger("dx12mc.region.rebuildsPerFrame", 4));
+      Math.max(1, Integer.getInteger("dx12mc.region.rebuildsPerFrame", 6));
   private static final long MAX_PAGE_BYTES =
       Math.max(1L << 20, Long.getLong("dx12mc.region.page.bytes", 8L << 20));
   private static final long STALE_FRAMES =
@@ -49,7 +49,7 @@ public final class SectionRegionBatcher implements AutoCloseable {
   private long frame = 1L;
   private long pass;
   private long residentBytes;
-  private int rebuildsThisFrame;
+  private final FrameBudget rebuilds = new FrameBudget(MAX_REBUILDS_PER_FRAME);
 
   interface PageFactory {
     Page create(Batch combined, boolean quadPattern, BGFXVertexLayout layout);
@@ -146,11 +146,10 @@ public final class SectionRegionBatcher implements AutoCloseable {
     for (Region region : touched) {
       purgeInvalidMembers(region);
       if (!region.dirty) continue;
-      if (rebuildsThisFrame >= MAX_REBUILDS_PER_FRAME) {
+      if (!rebuilds.tryTake()) {
         stats.regionRebuildDeferred();
         continue;
       }
-      rebuildsThisFrame++;
       if (rebuild(region, layout)) {
         for (Member member : region.members) meshes.discardGpuCopy(member.slot);
         stats.regionRebuilt();
@@ -192,7 +191,7 @@ public final class SectionRegionBatcher implements AutoCloseable {
 
   public void onFrameBoundary() {
     frame++;
-    rebuildsThisFrame = 0;
+    rebuilds.reset();
     for (int i = regions.size() - 1; i >= 0; i--) {
       Region region = regions.get(i);
       if (frame - region.lastUsedFrame > STALE_FRAMES) evict(region);
@@ -217,6 +216,9 @@ public final class SectionRegionBatcher implements AutoCloseable {
       return true;
     }
     ArrayList<Page> fresh = new ArrayList<>();
+    int memberCount = region.members.size();
+    int[] pageOf = new int[memberCount];
+    int[] firstOf = new int[memberCount];
     try {
       int start = 0;
       while (start < region.members.size()) {
@@ -226,21 +228,29 @@ public final class SectionRegionBatcher implements AutoCloseable {
                 region.members, start, end, region.key.x, region.key.y, region.key.z);
         int firstIndex = 0;
         for (int i = start; i < end; i++) {
-          Member member = region.members.get(i);
-          member.pageIndex = fresh.size();
-          member.firstIndex = firstIndex;
-          firstIndex += member.batch.indexCount();
+          pageOf[i] = fresh.size();
+          firstOf[i] = firstIndex;
+          firstIndex += region.members.get(i).batch.indexCount();
         }
         fresh.add(pageFactory.create(combined, assembler.quadPattern(), layout));
         start = end;
       }
     } catch (IllegalStateException failure) {
       closePages(fresh);
+      stats.regionRebuildFailed(failure.toString());
       return false;
     }
     if (!replacePages(region, fresh)) {
       closePages(fresh);
       return false;
+    }
+    for (int i = 0; i < memberCount; i++) {
+      Member member = region.members.get(i);
+      member.pageIndex = pageOf[i];
+      member.firstIndex = firstOf[i];
+      member.builtIndexCount = member.batch.indexCount();
+      member.builtVertexCount = member.batch.vertexCount();
+      member.built = true;
     }
     region.dirty = false;
     return true;
@@ -395,6 +405,7 @@ public final class SectionRegionBatcher implements AutoCloseable {
     private final ArrayList<Member> members = new ArrayList<>();
     private final ArrayList<Member> visible = new ArrayList<>();
     private ArrayList<Page> pages = new ArrayList<>();
+    private final ArrayList<Member> unbuilt = new ArrayList<>();
     private int[] runs = new int[0];
     private int[] planPage = new int[0];
     private int[] planFirst = new int[0];
@@ -449,9 +460,9 @@ public final class SectionRegionBatcher implements AutoCloseable {
         Member member = members.get(i);
         planPage[i] = member.pageIndex;
         planFirst[i] = member.firstIndex;
-        planIndices[i] = member.batch.indexCount();
-        planVertices[i] = member.batch.vertexCount();
-        planVisible[i] = member.visibleStamp == visiblePass;
+        planIndices[i] = member.builtIndexCount;
+        planVertices[i] = member.builtVertexCount;
+        planVisible[i] = member.built && member.visibleStamp == visiblePass;
       }
       int pageCount = pages.size();
       if (pageIndices.length < pageCount) {
@@ -473,6 +484,16 @@ public final class SectionRegionBatcher implements AutoCloseable {
           pageVertices,
           DRAW_COST_INDICES,
           runs);
+    }
+
+    public int unbuiltVisible() {
+      unbuilt.clear();
+      for (Member member : visible) if (!member.built) unbuilt.add(member);
+      return unbuilt.size();
+    }
+
+    public Member unbuilt(int index) {
+      return unbuilt.get(index);
     }
 
     public int runPage(int run) {
@@ -504,6 +525,9 @@ public final class SectionRegionBatcher implements AutoCloseable {
     private int originZ;
     private int pageIndex;
     private int firstIndex;
+    private int builtIndexCount;
+    private int builtVertexCount;
+    private boolean built;
     private long visibleStamp = Long.MIN_VALUE;
 
     Member(Slot slot, Batch batch, int originX, int originY, int originZ) {
