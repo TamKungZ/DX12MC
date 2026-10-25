@@ -2,6 +2,15 @@
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
+## 0.8.18 - Crash fixes for transient exhaustion and unready textures
+
+- Fix the fatal "bgfx/D3D12 rejected immediate submission" crash during chunk loading. Streaming sections of regions waiting for a rebuild used up the bgfx transient buffer pool, so the next particle, entity or GUI draw failed. Streaming is now limited to a per-frame byte budget (`dx12mc.stream.bytesPerFrame`), and a transient draw that does not fit is skipped for that frame instead of ending the game.
+- Regions waiting for a rebuild keep drawing their previous page, and only sections added since the last rebuild are streamed.
+- A page build failure no longer corrupts the section ranges of the previous page, and the failure is counted and logged in the PERF output.
+- A draw that samples a texture which was allocated but has not received pixels yet is skipped for that frame instead of ending the game. Draws with a missing texture still fail and now report the mirror state and recent deletions.
+- Raise the region rebuild limit to 6 per frame and limit GPU index updates for sorted translucent sections to 4 per frame (`dx12mc.mesh.indexUpdatesPerFrame`).
+- Report skipped draws by cause in the PERF log line.
+
 ## 0.8.17 - Render-thread stall fixes
 
 - Coalesce dirty texture regions per mip level before upload. Each bgfx texture update costs about 0.27 ms on the render thread regardless of size, so animated atlas sprites previously issued 100 or more updates per frame. Tune with `dx12mc.texture.updateCallCostPixels`.
