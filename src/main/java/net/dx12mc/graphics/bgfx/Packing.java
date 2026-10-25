@@ -31,12 +31,17 @@ public final class Packing {
   }
 
   public static void vertices(ByteBuffer target, Batch batch) {
-    target.order(ByteOrder.nativeOrder());
+    ByteOrder order = ByteOrder.nativeOrder();
+    target.order(order);
+    boolean reverseColor = order == ByteOrder.LITTLE_ENDIAN;
     float[] positions = batch.positions();
     int[] colors = batch.colors();
     float[] uv0 = batch.uv0();
     short[] uv2 = batch.uv2();
-    for (int vertex = 0; vertex < batch.vertexCount(); vertex++) {
+    boolean hasUv0 = batch.hasUv0();
+    boolean hasUv2 = batch.hasUv2();
+    int count = batch.vertexCount();
+    for (int vertex = 0; vertex < count; vertex++) {
       int p = vertex * 3;
       int uv = vertex * 2;
       int dst = vertex * VERTEX_STRIDE;
@@ -44,14 +49,11 @@ public final class Packing {
       target.putFloat(dst, positions[p]);
       target.putFloat(dst + 4, positions[p + 1]);
       target.putFloat(dst + 8, positions[p + 2]);
-      target.put(dst + 12, (byte) (rgba >>> 24));
-      target.put(dst + 13, (byte) (rgba >>> 16));
-      target.put(dst + 14, (byte) (rgba >>> 8));
-      target.put(dst + 15, (byte) rgba);
-      target.putFloat(dst + 16, batch.hasUv0() ? uv0[uv] : 0.0f);
-      target.putFloat(dst + 20, batch.hasUv0() ? uv0[uv + 1] : 0.0f);
-      target.putFloat(dst + 24, batch.hasUv2() ? Short.toUnsignedInt(uv2[uv]) : 0.0f);
-      target.putFloat(dst + 28, batch.hasUv2() ? Short.toUnsignedInt(uv2[uv + 1]) : 0.0f);
+      target.putInt(dst + 12, reverseColor ? Integer.reverseBytes(rgba) : rgba);
+      target.putFloat(dst + 16, hasUv0 ? uv0[uv] : 0.0f);
+      target.putFloat(dst + 20, hasUv0 ? uv0[uv + 1] : 0.0f);
+      target.putFloat(dst + 24, hasUv2 ? Short.toUnsignedInt(uv2[uv]) : 0.0f);
+      target.putFloat(dst + 28, hasUv2 ? Short.toUnsignedInt(uv2[uv + 1]) : 0.0f);
     }
   }
 
