@@ -5,6 +5,8 @@ Packaged in the mod JAR:
 - **LWJGL bgfx bindings 3.3.3** - BSD-3-Clause - nested as `META-INF/jars/lwjgl-bgfx-3.3.3.jar`.
 - **bgfx native library** - BSD-2-Clause - `bgfx.dll` for Windows x64, built by LWJGL and copied from the `lwjgl-bgfx` natives artifact.
 
+License texts for the packaged components are included in the JAR under `META-INF/licenses/`.
+
 Not packaged:
 
 - **LWJGL core 3.3.3** - BSD-3-Clause - supplied by Minecraft.
