@@ -21,7 +21,25 @@ val minecraftVersion = property("minecraft_version") as String
 val loaderVersion = property("loader_version") as String
 val lwjglVersion = property("lwjgl_version") as String
 val githubRepository = providers.environmentVariable("GITHUB_REPOSITORY").orElse("TamKungZ/DX12MC")
-val signingKeyName = "dev@tamkungz.me"
+val signingKeyCandidates = listOf("dev@tamkungz.me", "kitthiwat.phimpromma@proton.me")
+
+fun gpgHasSecretKey(keyName: String): Boolean {
+    return try {
+        ProcessBuilder("gpg", "--batch", "--list-secret-keys", keyName)
+            .redirectErrorStream(true)
+            .start()
+            .waitFor() == 0
+    } catch (_: Throwable) {
+        false
+    }
+}
+
+val signingKeyName: String? =
+    if (gradle.startParameter.taskNames.any { it.contains("publish", ignoreCase = true) || it.contains("sign", ignoreCase = true) }) {
+        signingKeyCandidates.firstOrNull { gpgHasSecretKey(it) }
+    } else {
+        null
+    }
 val bgfxWindowsNatives by configurations.creating
 val javaFormatter by configurations.creating
 val shadercCache = File(
@@ -381,21 +399,9 @@ tasks.remapJar {
     archiveFileName.set("dx12mc-${project.version}.jar")
 }
 
-extra["signing.gnupg.keyName"] = signingKeyName
+extra["signing.gnupg.keyName"] = signingKeyName ?: signingKeyCandidates.first()
 
-fun hasSigningKey(): Boolean {
-    if (!gradle.startParameter.taskNames.any { it.contains("publish", ignoreCase = true) || it.contains("sign", ignoreCase = true) }) {
-        return false
-    }
-    return try {
-        ProcessBuilder("gpg", "--batch", "--list-secret-keys", signingKeyName)
-            .redirectErrorStream(true)
-            .start()
-            .waitFor() == 0
-    } catch (_: Throwable) {
-        false
-    }
-}
+fun hasSigningKey(): Boolean = signingKeyName != null
 
 publishing {
     publications {
