@@ -44,7 +44,7 @@ The project prefers semantic Minecraft hooks over raw OpenGL interception. Low-l
 The bridge is responsible for converting Minecraft render inputs into data the backend can submit:
 
 - `bridge.mesh` encodes vertex and index data into compact CPU-side batches; `MeshStore` owns CPU captures and bounded GPU residency.
-- `bridge.texture` tracks image revisions and uploads texture regions progressively. `MipLevel` owns pixel/dirty-region state, while `TextureEntry` owns CPU-to-GPU synchronization.
+- `bridge.texture` tracks image revisions and uploads texture regions progressively. `MipLevel` owns pixel/dirty-region state and merges dirty regions when one larger update is cheaper than several, while `TextureEntry` owns CPU-to-GPU synchronization.
 - `bridge.shader` maps supported vertex formats and render types to shader families.
 - `bridge.state` tracks Minecraft render state separately from the bgfx bit encoder and scissor conversion.
 - `DrawContextFactory` resolves per-draw matrices, shader semantics, textures, and state without allocating on the steady-state path.
@@ -54,6 +54,8 @@ The bridge is responsible for converting Minecraft render inputs into data the b
 The Minecraft-facing `Controller` remains the stable integration API. `RendererLifecycle` owns backend initialization, frame and present boundaries, fatal state, and shutdown; `SectionRenderContext` owns the reusable transforms for compiled section layers.
 
 The bridge keeps CPU mirrors for data that Minecraft may update asynchronously, such as sorted translucent indices or dirty texture regions. This lets DX12MC retry native work across frame boundaries without depending on stale OpenGL buffers.
+
+Compiled opaque sections are combined into region pages. Pages made only of quads share one static index buffer, and each frame draws either a whole page or only the index ranges of its visible sections, whichever costs less. Region rebuilds and per-section GPU mesh creations are limited per frame, and sections waiting for a rebuild are streamed through transient buffers.
 
 The steady-state section draw path avoids creating Java objects per draw. It reuses matrix, draw-context, and resident-metadata storage, caches shader classification while the active shader is unchanged, and reuses translated render-state snapshots until state or framebuffer dimensions change. Native vertex staging contains only attributes consumed by current shaders; richer compact attributes remain in the CPU batch until a shader family needs them.
 
@@ -90,5 +92,7 @@ Examples of intentionally limited behavior:
 These limitations are tracked in source and tests so missing coverage is visible during development.
 
 ## Tests
+
+`renderBench` and `cpuBench` are Gradle tasks that measure bgfx submission and CPU-side mesh paths on the local GPU. They are diagnostics, not part of `check`.
 
 Tests cover small bridge components, encoding rules, shader source contracts, and selected source-level stability checks. Source checks follow responsibilities across extracted components instead of assuming every invariant lives in one large facade. They are intended to catch regressions in the current architecture, not to prove full Minecraft renderer compatibility.
