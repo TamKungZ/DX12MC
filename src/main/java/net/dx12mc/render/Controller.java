@@ -316,7 +316,15 @@ public final class Controller implements AutoCloseable {
   }
 
   public void endSectionLayer() {
-    if (bridge != null && section.active()) bridge.endSectionLayer();
+    if (bridge != null && section.active()) {
+      try {
+        bridge.endSectionLayer();
+      } catch (FatalRenderException fatal) {
+        throw fatal;
+      } catch (Throwable throwable) {
+        throw fatal("Native D3D12 section-layer flush failed.", throwable);
+      }
+    }
     section.end();
     this.semanticIntent = "frame";
     if (bridge != null) bridge.semanticIntent(this.semanticIntent);
