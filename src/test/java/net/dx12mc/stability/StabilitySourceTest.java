@@ -31,6 +31,17 @@ class StabilitySourceTest {
   }
 
   @Test
+  void sectionLayerFlushFailuresGoThroughTheFatalPath() throws IOException {
+    String controller = read("render/Controller.java");
+    int start = controller.indexOf("public void endSectionLayer()");
+    int end = controller.indexOf("public boolean drawImmediate(", start);
+    String body = controller.substring(start, end);
+    assertTrue(body.contains("bridge.endSectionLayer();"));
+    assertTrue(
+        body.contains("throw fatal(\"Native D3D12 section-layer flush failed.\", throwable);"));
+  }
+
+  @Test
   void nativeDrawFailuresAreFatalInsteadOfReturningToOpenGl() throws IOException {
     String controller = read("render/Controller.java");
     String bridge = read("bridge/Bridge.java") + read("bridge/DrawContextFactory.java");
