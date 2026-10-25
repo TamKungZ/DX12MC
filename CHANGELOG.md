@@ -2,6 +2,12 @@
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
+## 0.8.16 - Native shutdown and staging hardening
+
+- Close every bridge resource during shutdown even if one close fails, so a single error no longer leaks the remaining native handles.
+- Reject mesh batches that declare indices without vertices and make batch size checks overflow-safe.
+- Pack vertex colors with a single write and hoist per-vertex attribute checks out of the staging loop.
+
 ## 0.8.15 - Remove duplicate OpenGL frame work
 
 - Stop binding, viewport-setting and clearing Minecraft's unused OpenGL render target after D3D12 takes ownership of presentation.
