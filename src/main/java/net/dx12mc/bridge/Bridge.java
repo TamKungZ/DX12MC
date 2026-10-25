@@ -504,12 +504,9 @@ public final class Bridge implements AutoCloseable {
       SectionRegionBatcher.Member member = region.visible(memberIndex);
       contexts.sectionMatrix(regions.transform(member));
       Batch batch = member.batch();
-      Mesh gpu = meshes.resident(member.slot(), pipelines.layout());
-      boolean transientBuffer = gpu == null || !gpu.valid();
-      boolean success =
-          transientBuffer ? submitTransient(batch, context) : submitPersistent(gpu, context);
-      if (transientBuffer) stats.nativeStreamingSpill();
-      stats.submitted(batch, success, transientBuffer, context.textured(), context.lightmapped());
+      boolean success = submitTransient(batch, context);
+      stats.nativeStreamingSpill();
+      stats.submitted(batch, success, true, context.textured(), context.lightmapped());
       if (!success) {
         stats.deferredSectionDraw();
       }
