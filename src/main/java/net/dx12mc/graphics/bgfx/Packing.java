@@ -17,10 +17,6 @@ public final class Packing {
     return Math.multiplyExact(batch.indexCount(), index32(batch) ? Integer.BYTES : Short.BYTES);
   }
 
-  public static long gpuBytes(Batch batch) {
-    return (long) vertexBytes(batch) + indexBytes(batch);
-  }
-
   public static boolean index32(int[] indices) {
     for (int index : indices) if (index > 0xFFFF) return true;
     return false;
