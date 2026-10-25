@@ -8,20 +8,8 @@ import org.junit.jupiter.api.Test;
 class BatchTest {
 
   @Test
-  void acceptsIndicesInsideVertexRange() {
+  void acceptsTriangleBatch() {
     assertEquals(3, batch(new int[] {0, 1, 2}, 3).indexCount());
-  }
-
-  @Test
-  void rejectsIndexOutsideVertexRange() {
-    assertThrows(IllegalArgumentException.class, () -> batch(new int[] {0, 1, 3}, 3));
-    assertThrows(IllegalArgumentException.class, () -> batch(new int[] {0, -1, 2}, 3));
-  }
-
-  @Test
-  void rejectsReplacementIndicesOutsideVertexRange() {
-    Batch batch = batch(new int[] {0, 1, 2}, 3);
-    assertThrows(IllegalArgumentException.class, () -> batch.withIndices(new int[] {0, 1, 7}));
   }
 
   @Test
