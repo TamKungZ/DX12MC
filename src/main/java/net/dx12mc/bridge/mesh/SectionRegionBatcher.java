@@ -441,10 +441,6 @@ public final class SectionRegionBatcher implements AutoCloseable {
       return pages.get(index);
     }
 
-    public int visibleCount() {
-      return visible.size();
-    }
-
     public int visibleRuns() {
       int count = members.size();
       if (planPage.length < count) {
@@ -510,10 +506,6 @@ public final class SectionRegionBatcher implements AutoCloseable {
 
     public int runVertexCount(int run) {
       return runs[run * RunPlanner.FIELDS + 3];
-    }
-
-    public Member visible(int index) {
-      return visible.get(index);
     }
   }
 
