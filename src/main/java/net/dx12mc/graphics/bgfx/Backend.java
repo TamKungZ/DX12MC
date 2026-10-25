@@ -9,6 +9,15 @@ import org.lwjgl.bgfx.BGFXStats;
 
 public final class Backend implements AutoCloseable {
   public static final int MAIN_VIEW = 0;
+  private static final int TRANSIENT_VERTEX_BYTES =
+      (int)
+          Math.min(
+              Integer.MAX_VALUE,
+              Math.max(6L, Long.getLong("dx12mc.transient.vertexMiB", 24L)) << 20);
+  private static final int TRANSIENT_INDEX_BYTES =
+      (int)
+          Math.min(
+              Integer.MAX_VALUE, Math.max(2L, Long.getLong("dx12mc.transient.indexMiB", 8L)) << 20);
   private final DebugText debugText = new DebugText();
   private boolean initialized;
   private FrameSize size = new FrameSize(1, 1);
@@ -32,6 +41,7 @@ public final class Backend implements AutoCloseable {
       init.type(BGFX_RENDERER_TYPE_DIRECT3D12);
       init.platformData().nwh(nativeWindow);
       init.resolution().width(size.width()).height(size.height()).reset(resetFlags);
+      init.limits().transientVbSize(TRANSIENT_VERTEX_BYTES).transientIbSize(TRANSIENT_INDEX_BYTES);
       if (!bgfx_init(init)) {
         throw new IllegalStateException("bgfx_init returned false for Direct3D 12");
       }
