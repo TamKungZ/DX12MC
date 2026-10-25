@@ -350,6 +350,14 @@ public final class Stats {
     return regionPageSubmitFrame;
   }
 
+  public long textureGpuUpdateCalls() {
+    return textureGpuUpdateRegionTotal;
+  }
+
+  public long textureGpuUploadBytes() {
+    return textureGpuUploadBytesTotal;
+  }
+
   public long regionRebuilds() {
     return regionRebuildTotal;
   }
