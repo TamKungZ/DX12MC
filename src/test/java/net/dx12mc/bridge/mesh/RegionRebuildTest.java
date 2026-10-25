@@ -21,6 +21,7 @@ class RegionRebuildTest {
   private final List<Integer> builtVertexCounts = new ArrayList<>();
   private final Object layer = new Object();
   private boolean failNextBuild;
+  private boolean pressureNextBuild;
   private SectionRegionBatcher batcher;
   private MeshStore meshes;
 
@@ -33,6 +34,11 @@ class RegionRebuildTest {
               if (failNextBuild) {
                 failNextBuild = false;
                 throw new IllegalStateException("simulated page failure");
+              }
+              if (pressureNextBuild) {
+                pressureNextBuild = false;
+                throw new net.dx12mc.graphics.bgfx.StagingBackpressureException(
+                    "simulated pressure");
               }
               builtQuadPatterns.add(quadPattern);
               builtVertexCounts.add(combined.vertexCount());
@@ -230,6 +236,57 @@ class RegionRebuildTest {
     batcher.prepare(null, meshes);
     assertEquals(1, batcher.touchedCount());
     batcher.end();
+  }
+
+  @Test
+  void deferredRegionNeverDrawsGeometryOfRemovedMembers() {
+    List<Slot> slots = slots(3);
+    int[] originsX = {0, 16, 0};
+    int[] originsZ = {0, 0, 16};
+    begin();
+    for (int i = 0; i < 3; i++) {
+      batcher.collect(slots.get(i), slots.get(i).batch(), originsX[i], 0, originsZ[i]);
+    }
+    batcher.prepare(null, meshes);
+    batcher.end();
+    frameBoundary();
+
+    batcher.invalidate(slots.get(1));
+    slots.get(1).capture(quads(8), false, VertexFormat.IndexType.INT, 12);
+    List<Slot> fillers = slots(REBUILD_BUDGET);
+    begin();
+    for (int i = 0; i < fillers.size(); i++) {
+      batcher.collect(fillers.get(i), fillers.get(i).batch(), 1000 + i * 64, 0, 0);
+    }
+    for (int i = 0; i < 3; i++) {
+      batcher.collect(slots.get(i), slots.get(i).batch(), originsX[i], 0, originsZ[i]);
+    }
+    batcher.prepare(null, meshes);
+    SectionRegionBatcher.Region region = batcher.touched(REBUILD_BUDGET);
+    assertFalse(region.ready());
+    int drawn = 0;
+    int runs = region.visibleRuns();
+    for (int run = 0; run < runs; run++) {
+      int first = region.runFirstIndex(run);
+      int count = region.runIndexCount(run);
+      assertFalse(first < 24 && first + count > 12, "run covers the removed member");
+      drawn += count;
+    }
+    assertEquals(24, drawn);
+    assertEquals(1, region.unbuiltVisible());
+    batcher.end();
+  }
+
+  @Test
+  void stagingPressureDefersTheRebuildWithoutCountingAFailure() {
+    List<Slot> slots = slots(1);
+    pressureNextBuild = true;
+    frame(slots, 32);
+    assertEquals(0, stats.regionRebuildFailures());
+    assertEquals(1, stats.regionRebuildDeferrals());
+    assertEquals(0, stats.regionRebuilds());
+    frame(slots, 32);
+    assertEquals(1, stats.regionRebuilds());
   }
 
   private void frame(List<Slot> slots, int spacing) {
