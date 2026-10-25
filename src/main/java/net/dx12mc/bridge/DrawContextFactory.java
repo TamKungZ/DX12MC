@@ -138,6 +138,8 @@ final class DrawContextFactory {
             + textureId
             + ", shader="
             + shader
+            + ", "
+            + textures.describeMissing(textureId)
             + ". OpenGL draw fallback is disabled.");
   }
 
