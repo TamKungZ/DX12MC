@@ -32,6 +32,8 @@ public final class Stats {
       residentMeshRetryTotal;
   private long residentMeshBytes, residentMeshBytesPeak, meshCpuBytes, meshCpuBytesPeak;
   private long nativeStreamingSpillTotal, deferredSectionDrawTotal;
+  private long textureNotReadyDrawTotal, transientPressureDrawTotal, regionRebuildFailureTotal;
+  private String lastRegionRebuildFailure = "";
   private long suppressedLegacyVertexStorageTotal, suppressedLegacyVertexStorageBytes;
   private long textureCpuBytes;
   private long nativeStagingBytes, nativeStagingBytesPeak;
@@ -237,6 +239,39 @@ public final class Stats {
 
   public void nativeStreamingSpill() {
     nativeStreamingSpillTotal++;
+  }
+
+  public void regionRebuildFailed(String reason) {
+    regionRebuildFailureTotal++;
+    lastRegionRebuildFailure = reason;
+  }
+
+  public long regionRebuildFailures() {
+    return regionRebuildFailureTotal;
+  }
+
+  public String lastRegionRebuildFailure() {
+    return lastRegionRebuildFailure;
+  }
+
+  public long deferredSectionDraws() {
+    return deferredSectionDrawTotal;
+  }
+
+  public void textureNotReadyDraw() {
+    textureNotReadyDrawTotal++;
+  }
+
+  public long textureNotReadyDraws() {
+    return textureNotReadyDrawTotal;
+  }
+
+  public void transientPressureDraw() {
+    transientPressureDrawTotal++;
+  }
+
+  public long transientPressureDraws() {
+    return transientPressureDrawTotal;
   }
 
   public void deferredSectionDraw() {
