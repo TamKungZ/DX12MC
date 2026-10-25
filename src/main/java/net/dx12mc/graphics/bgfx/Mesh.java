@@ -15,6 +15,8 @@ public final class Mesh implements AutoCloseable {
   private int indexBytes;
   private final boolean index32;
   private long bytes;
+  private int drawFirstIndex;
+  private int drawIndexCount = -1;
 
   private Mesh(
       short vertices,
@@ -105,7 +107,23 @@ public final class Mesh implements AutoCloseable {
   public void bind() {
     if (!valid()) throw new IllegalStateException("mesh is closed");
     bgfx_set_vertex_buffer(0, vertices, 0, vertexCount);
-    bgfx_set_dynamic_index_buffer(indices, 0, indexCount);
+    int first = drawIndexCount < 0 ? 0 : drawFirstIndex;
+    int count = drawIndexCount < 0 ? indexCount : drawIndexCount;
+    bgfx_set_dynamic_index_buffer(indices, first, count);
+  }
+
+  public void drawRange(int firstIndex, int count) {
+    if (firstIndex < 0 || count <= 0 || (long) firstIndex + count > indexCount) {
+      throw new IllegalArgumentException(
+          "index range " + firstIndex + "+" + count + " is outside " + indexCount);
+    }
+    drawFirstIndex = firstIndex;
+    drawIndexCount = count;
+  }
+
+  public void drawAll() {
+    drawFirstIndex = 0;
+    drawIndexCount = -1;
   }
 
   public boolean valid() {
