@@ -14,6 +14,21 @@ final class Indices {
     return out;
   }
 
+  static boolean isQuadPattern(int[] indices, int indexCount, int vertexCount) {
+    if (vertexCount <= 0 || vertexCount % 4 != 0 || indexCount != vertexCount / 4 * 6) return false;
+    for (int quad = 0; quad < vertexCount / 4; quad++) {
+      int v = quad * 4;
+      int i = quad * 6;
+      if (indices[i] != v
+          || indices[i + 1] != v + 1
+          || indices[i + 2] != v + 2
+          || indices[i + 3] != v + 2
+          || indices[i + 4] != v + 3
+          || indices[i + 5] != v) return false;
+    }
+    return true;
+  }
+
   static int triangleIndexCount(VertexFormat.Mode mode, int vertexCount) {
     if (mode == null || vertexCount <= 0) return 0;
     return switch (mode) {
