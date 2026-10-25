@@ -4,6 +4,12 @@ Note: 0.9.0 is the version that fixes the low FPS problem. On a GT1030 it perfor
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
+## 0.9.1 - Review fixes
+
+- While a terrain region waits for its rebuild, draw only the ranges of sections that are still current. Previously the whole stale page could be drawn, which showed geometry of removed or replaced sections next to their streamed replacement until the rebuild ran.
+- Route failures while flushing a terrain section layer through the strict fatal path, so they are logged consistently and native resources are released.
+- Treat staging backpressure during a region rebuild as a deferral instead of reporting it as a rebuild failure.
+
 ## 0.9.0 - Low FPS fix
 
 Combines the 0.8.17 and 0.8.18 changes as released together.
