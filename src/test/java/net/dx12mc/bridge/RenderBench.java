@@ -278,7 +278,7 @@ public final class RenderBench {
     float[] texMatrix = new float[16];
     new Matrix4f().identity().get(texMatrix);
     float[] tint = {1, 1, 1, 1};
-    String[] kinds = {"SORTABLE", "STATIC", "POOLED", "SHARED_QUADS"};
+    String[] kinds = {"SORTABLE", "POOLED", "SHARED_QUADS"};
     for (String kind : kinds) {
       for (int vertices : new int[] {4000, 70000}) {
         Batch batch = grid(new Random(5), vertices);
