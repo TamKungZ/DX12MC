@@ -43,11 +43,6 @@ public record Batch(
     if (indexCount <= 0 || indexCount > indices.length || indexCount % 3 != 0)
       throw new IllegalArgumentException("native pipeline requires triangle-list indices");
     if (vertexCount == 0) throw new IllegalArgumentException("indices require at least one vertex");
-    for (int i = 0; i < indexCount; i++) {
-      if (indices[i] < 0 || indices[i] >= vertexCount)
-        throw new IllegalArgumentException(
-            "index " + indices[i] + " at " + i + " is outside vertexCount " + vertexCount);
-    }
   }
 
   public Batch(
