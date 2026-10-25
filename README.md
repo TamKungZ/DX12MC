@@ -13,13 +13,13 @@ The project is experimental and Windows-focused. It is not a general performance
 
 ## License
 
-Source code is licensed under GPL-3.0. See `LICENSE`.
+Source code is licensed under LGPL-3.0-only. See `LICENSE` and `NOTICE`.
 
 Third-party components keep their own licenses. See `THIRD_PARTY.md`.
 
 ## Brand
 
-The DX12MC name and project logo are not licensed under GPL-3.0.
+The DX12MC name and project logo are not licensed under LGPL-3.0.
 
 Forks and redistributed builds must use their own name and branding, and must not present themselves as the official DX12MC project or release channel.
 

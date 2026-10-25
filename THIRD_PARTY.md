@@ -12,4 +12,4 @@ DX12MC uses the following third-party components:
 
 - **OpenAI Codex** - AI coding assistant used for documentation and maintenance utilities; not a project dependency and not packaged in the mod JAR. Project direction, design decisions, debugging, and fixes remain maintained by the project author.
 
-DX12MC source code is licensed under GPL-3.0. Third-party components keep their own licenses.
+DX12MC source code is licensed under LGPL-3.0-only. Third-party components keep their own licenses.

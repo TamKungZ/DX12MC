@@ -4,6 +4,10 @@ Note: 0.9.0 is the version that fixes the low FPS problem. On a GT1030 it perfor
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
+## 0.9.2 - License change
+
+- Relicense the source code from GPL-3.0 to LGPL-3.0-only and add a NOTICE file. The GPL-3.0 text is kept as `LICENSE-GPL-3.0` because the LGPL incorporates it. Earlier releases remain available under the GPL-3.0 terms they were published with.
+
 ## 0.9.1 - Review fixes
 
 - While a terrain region waits for its rebuild, draw only the ranges of sections that are still current. Previously the whole stale page could be drawn, which showed geometry of removed or replaced sections next to their streamed replacement until the rebuild ran.
