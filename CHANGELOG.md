@@ -2,10 +2,11 @@
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
-## 0.8.16 - Native shutdown and staging hardening
+## 0.8.16 - Region culling and shutdown hardening
 
 - Close every bridge resource during shutdown even if one close fails, so a single error no longer leaks the remaining native handles.
 - Reject mesh batches that declare indices without vertices and make batch size checks overflow-safe.
+- Draw only the index ranges of visible sections inside a resident terrain region instead of the whole region page, so frustum and cave culling apply again and hidden geometry is no longer submitted.
 - Pack vertex colors with a single write and hoist per-vertex attribute checks out of the staging loop.
 
 ## 0.8.15 - Remove duplicate OpenGL frame work
