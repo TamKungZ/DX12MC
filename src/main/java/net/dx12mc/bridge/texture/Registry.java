@@ -10,6 +10,10 @@ public final class Registry implements AutoCloseable {
   private static final long MAX_TOTAL_CPU_BYTES =
       Long.getLong("dx12mc.texture.maxTotalBytes", 512L * 1024L * 1024L);
   private final Map<Integer, TextureEntry> entries = new HashMap<>();
+  private static final int DELETED_HISTORY = 32;
+  private final int[] deletedIds = new int[DELETED_HISTORY];
+  private final long[] deletedFrames = new long[DELETED_HISTORY];
+  private int deletedCursor;
   private final Stats stats;
   private int boundId;
   private boolean started;
@@ -204,7 +208,8 @@ public final class Registry implements AutoCloseable {
         id == cachedResolvedId && cachedResolvedEntry != null
             ? cachedResolvedEntry
             : entries.get(id);
-    if (entry == null || !entry.image.hasBasePixels()) return null;
+    if (entry == null) return null;
+    if (!entry.image.hasBasePixels()) throw new TextureNotReadyException(id);
     cachedResolvedId = id;
     cachedResolvedEntry = entry;
     Texture ready = entry.currentIfReady();
@@ -212,8 +217,23 @@ public final class Registry implements AutoCloseable {
     return entry.resolve(id, frameBoundary, allocatedCpuBytes());
   }
 
+  public String describeMissing(int id) {
+    StringBuilder text = new StringBuilder("started=").append(started);
+    text.append(", mirrored=").append(entries.size()).append(", bound=").append(boundId);
+    for (int i = 0; i < DELETED_HISTORY; i++) {
+      if (deletedIds[i] == id && id > 0) {
+        text.append(", deleted ").append(frameBoundary - deletedFrames[i]).append(" frames ago");
+        break;
+      }
+    }
+    return text.toString();
+  }
+
   public void delete(int id) {
     TextureEntry entry = entries.remove(id);
+    deletedIds[deletedCursor] = id;
+    deletedFrames[deletedCursor] = frameBoundary;
+    deletedCursor = (deletedCursor + 1) % DELETED_HISTORY;
     if (entry != null) {
       entry.close();
       cpuBytes -= entry.image.allocatedCpuBytes();
