@@ -10,6 +10,7 @@ import net.dx12mc.bridge.Slot;
 import net.dx12mc.bridge.Stats;
 import net.dx12mc.graphics.bgfx.Mesh;
 import net.dx12mc.graphics.bgfx.Packing;
+import net.dx12mc.graphics.bgfx.StagingBackpressureException;
 import org.joml.Matrix4f;
 import org.lwjgl.bgfx.BGFXVertexLayout;
 
@@ -235,6 +236,9 @@ public final class SectionRegionBatcher implements AutoCloseable {
         fresh.add(pageFactory.create(combined, assembler.quadPattern(), layout));
         start = end;
       }
+    } catch (StagingBackpressureException pressure) {
+      closePages(fresh);
+      return false;
     } catch (IllegalStateException failure) {
       closePages(fresh);
       stats.regionRebuildFailed(failure.toString());
@@ -478,7 +482,7 @@ public final class SectionRegionBatcher implements AutoCloseable {
           planVisible,
           pageIndices,
           pageVertices,
-          DRAW_COST_INDICES,
+          dirty ? 0L : DRAW_COST_INDICES,
           runs);
     }
 
