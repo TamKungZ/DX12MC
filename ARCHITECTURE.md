@@ -55,7 +55,7 @@ The Minecraft-facing `Controller` remains the stable integration API. `RendererL
 
 The bridge keeps CPU mirrors for data that Minecraft may update asynchronously, such as sorted translucent indices or dirty texture regions. This lets DX12MC retry native work across frame boundaries without depending on stale OpenGL buffers.
 
-Compiled opaque sections are combined into region pages. Pages made only of quads share one static index buffer, and each frame draws either a whole page or only the index ranges of its visible sections, whichever costs less. Region rebuilds and per-section GPU mesh creations are limited per frame, and sections waiting for a rebuild are streamed through transient buffers.
+Compiled opaque sections are combined into region pages. Pages made only of quads share one static index buffer, and each frame draws either a whole page or only the index ranges of its visible sections, whichever costs less. Region rebuilds, per-section GPU mesh creations and GPU index updates are limited per frame. A region waiting for a rebuild keeps drawing its previous page, and sections added since then are streamed through transient buffers within a per-frame byte budget so draws such as particles and GUI keep their share of the transient pool.
 
 The steady-state section draw path avoids creating Java objects per draw. It reuses matrix, draw-context, and resident-metadata storage, caches shader classification while the active shader is unchanged, and reuses translated render-state snapshots until state or framebuffer dimensions change. Native vertex staging contains only attributes consumed by current shaders; richer compact attributes remain in the CPU batch until a shader family needs them.
 
