@@ -6,9 +6,11 @@ import net.dx12mc.bridge.DrawContext;
 import net.dx12mc.bridge.mesh.Batch;
 import net.dx12mc.graphics.bgfx.Layout;
 import net.dx12mc.graphics.bgfx.Mesh;
+import net.dx12mc.graphics.bgfx.QuadIndices;
 
 public final class PipelineSet implements AutoCloseable {
   private Layout layout;
+  private QuadIndices quadIndices;
   private ColorPipeline color;
   private TexturePipeline texture;
   private LightmapTexturePipeline lightmapTexture;
@@ -17,6 +19,7 @@ public final class PipelineSet implements AutoCloseable {
   public void start() {
     if (layout != null) return;
     layout = new Layout();
+    quadIndices = new QuadIndices();
     color = new ColorPipeline(layout);
     texture = new TexturePipeline(layout);
     lightmapTexture = new LightmapTexturePipeline(layout);
@@ -149,6 +152,10 @@ public final class PipelineSet implements AutoCloseable {
     if (color != null) {
       color.close();
       color = null;
+    }
+    if (quadIndices != null) {
+      quadIndices.close();
+      quadIndices = null;
     }
     if (layout != null) {
       layout.close();
