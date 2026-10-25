@@ -413,10 +413,16 @@ public final class Bridge implements AutoCloseable {
 
   @Override
   public void close() {
-    regions.close();
-    meshes.close();
-    textures.close();
-    pipelines.close();
+    RuntimeException failure = null;
+    for (AutoCloseable resource : new AutoCloseable[] {regions, meshes, textures, pipelines}) {
+      try {
+        resource.close();
+      } catch (Exception exception) {
+        if (failure == null) failure = new IllegalStateException("Bridge close failed", exception);
+        else failure.addSuppressed(exception);
+      }
+    }
+    if (failure != null) throw failure;
   }
 
   private DrawContext context(
