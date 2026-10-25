@@ -8,7 +8,6 @@ import org.lwjgl.bgfx.BGFXVertexLayout;
 
 public final class Mesh implements AutoCloseable {
   public enum Kind {
-    STATIC,
     SORTABLE,
     POOLED,
     SHARED_QUADS
@@ -73,7 +72,6 @@ public final class Mesh implements AutoCloseable {
       int widthFlag = index32 ? BGFX_BUFFER_INDEX32 : BGFX_BUFFER_NONE;
       indexHandle =
           switch (kind) {
-            case STATIC -> bgfx_create_index_buffer(indexMemory, widthFlag);
             case SORTABLE ->
                 bgfx_create_dynamic_index_buffer_mem(
                     indexMemory, BGFX_BUFFER_ALLOW_RESIZE | widthFlag);
@@ -176,8 +174,7 @@ public final class Mesh implements AutoCloseable {
     } else {
       bgfx_set_vertex_buffer(0, vertices, 0, vertexCount);
     }
-    if (kind == Kind.STATIC || kind == Kind.SHARED_QUADS)
-      bgfx_set_index_buffer(indices, first, count);
+    if (kind == Kind.SHARED_QUADS) bgfx_set_index_buffer(indices, first, count);
     else bgfx_set_dynamic_index_buffer(indices, first, count);
   }
 
@@ -213,8 +210,7 @@ public final class Mesh implements AutoCloseable {
       } else bgfx_destroy_vertex_buffer(vertices);
     }
     if (BGFX_HANDLE_IS_VALID(indices)) {
-      if (kind == Kind.STATIC) bgfx_destroy_index_buffer(indices);
-      else bgfx_destroy_dynamic_index_buffer(indices);
+      bgfx_destroy_dynamic_index_buffer(indices);
     }
   }
 }
