@@ -1,15 +1,19 @@
 # Third-party components
 
-DX12MC uses the following third-party components:
+Packaged in the mod JAR:
 
-- **LWJGL 3.3.3** - BSD-3-Clause - Java/native bindings and bgfx bindings.
-- **bgfx** - BSD-2-Clause - graphics backend abstraction used with Direct3D 12.
-- **bgfx shaderc** - bgfx toolchain - build-time shader compiler; not packaged in the mod JAR.
-- **Fabric Loader / Loom / SpongePowered Mixin** - upstream licenses - mod loading, build integration, mappings, and mixin support.
-- **JUnit Jupiter 5.11.4** - EPL-2.0 - test dependency; not packaged in the mod JAR.
+- **LWJGL bgfx bindings 3.3.3** - BSD-3-Clause - nested as `META-INF/jars/lwjgl-bgfx-3.3.3.jar`.
+- **bgfx native library** - BSD-2-Clause - `bgfx.dll` for Windows x64, built by LWJGL and copied from the `lwjgl-bgfx` natives artifact.
 
-## Development tools
+Not packaged:
 
-- **OpenAI Codex** - AI coding assistant used for documentation and maintenance utilities; not a project dependency and not packaged in the mod JAR. Project direction, design decisions, debugging, and fixes remain maintained by the project author.
+- **LWJGL core 3.3.3** - BSD-3-Clause - supplied by Minecraft.
+- **Fabric Loader** - Apache-2.0 - supplied by the player's Fabric installation.
+- **SpongePowered Mixin (Fabric fork)** - MIT - supplied by Fabric Loader.
+- **Fabric Loom** - MIT - build-time Gradle plugin.
+- **bgfx shaderc** - BSD-2-Clause - build-time shader compiler; the compiled shaders are packaged, the compiler is not.
+- **JUnit Jupiter 5.11.4** - EPL-2.0 - test dependency.
+
+Minecraft is built against Mojang's official mappings (Loom `officialMojangMappings`). They are used at build time, no mapping files are packaged, and they are subject to Mojang's terms.
 
 DX12MC source code is licensed under LGPL-3.0-only. Third-party components keep their own licenses.

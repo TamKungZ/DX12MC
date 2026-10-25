@@ -9,7 +9,7 @@ The project is experimental and Windows-focused. It is not a general performance
 - Minecraft Java client mod for Fabric.
 - Direct3D 12 backend through bgfx.
 - Rendering bridge work for geometry, textures, render state, shaders, and presentation.
-- Source-first development; detailed documentation lives outside this repository.
+- Source-first development; see `ARCHITECTURE.md` for a source-level overview.
 
 ## License
 
@@ -25,4 +25,4 @@ Forks and redistributed builds must use their own name and branding, and must no
 
 ## Contributions
 
-Pull requests are welcome. Maintainer approval is required before changes are merged or released under the DX12MC name.
+Pull requests are welcome. Maintainer approval is required before changes are merged or released under the DX12MC name. See `CONTRIBUTING.md`.
