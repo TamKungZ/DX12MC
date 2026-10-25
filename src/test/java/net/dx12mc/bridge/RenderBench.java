@@ -50,6 +50,7 @@ public final class RenderBench {
     String filter = args.length > 0 ? args[0] : "";
     if (filter.equals("verify")) {
       verify(backend, pipelines, context);
+      exhaustTransient(backend, pipelines, context);
       pipelines.close();
       atlas.close();
       light.close();
@@ -80,28 +81,34 @@ public final class RenderBench {
       "350 draws rebuild 16 pages",
       "350 draws rebuild 64 pages",
       "350 draws + 300 transient",
-      "350 draws + 1000 transient"
+      "350 draws + 1000 transient",
+      "350 draws + 4 sort updates",
+      "350 draws + 16 sort updates"
     };
-    int[] rebuilds = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 16, 64, 0, 0};
+    int[] rebuilds = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 16, 64, 0, 0, 0, 0};
     net.dx12mc.bridge.texture.AtlasAnimation animation =
         new net.dx12mc.bridge.texture.AtlasAnimation(1024, 4, 40);
     int[] drawCounts = {
       350, 1400, 8, 20, 700, 350, 350, 350, 350, 350, 350, 350, 350, 350, 350, 900, 1100, 2800, 350,
-      350, 350, 350, 350
+      350, 350, 350, 350, 350, 350
     };
     int[] updatesPerFrame = {
-      0, 0, 0, 0, 0, 0, 8, 32, 128, 1, 1, 4, 32, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0
+      0, 0, 0, 0, 0, 0, 8, 32, 128, 1, 1, 4, 32, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     };
     int[] updateWidth = {
       16, 16, 16, 16, 16, 16, 16, 16, 16, 1024, 512, 256, 64, 1024, 16, 16, 16, 16, 16, 16, 16, 16,
-      16
+      16, 16, 16
     };
     int[] updateHeight = {
-      16, 16, 16, 16, 16, 16, 16, 16, 16, 1024, 512, 256, 64, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16
+      16, 16, 16, 16, 16, 16, 16, 16, 16, 1024, 512, 256, 64, 16, 16, 16, 16, 16, 16, 16, 16, 16,
+      16, 16, 16
     };
     int[] transients = new int[names.length];
-    transients[names.length - 2] = 300;
-    transients[names.length - 1] = 1000;
+    transients[names.length - 4] = 300;
+    transients[names.length - 3] = 1000;
+    int[] sortUpdates = new int[names.length];
+    sortUpdates[names.length - 2] = 4;
+    sortUpdates[names.length - 1] = 16;
     for (int i = 0; i < names.length; i++) {
       if (!filter.isEmpty() && !names[i].contains(filter)) continue;
       run(
@@ -114,6 +121,7 @@ public final class RenderBench {
           updateHeight[i],
           rebuilds[i],
           transients[i],
+          sortUpdates[i],
           names[i].contains("animated") ? animation : null,
           atlas,
           backend,
@@ -136,6 +144,7 @@ public final class RenderBench {
       int updateHeight,
       int rebuildsPerFrame,
       int transientDraws,
+      int sortUpdatesPerFrame,
       net.dx12mc.bridge.texture.AtlasAnimation animation,
       Texture atlas,
       Backend backend,
@@ -160,6 +169,7 @@ public final class RenderBench {
     String kindName = System.getProperty("bench.kind", "SORTABLE");
     Mesh.Kind kind =
         kindName.equals("SHARED_QUADS") ? Mesh.Kind.SHARED_QUADS : Mesh.Kind.valueOf(kindName);
+    Batch sortBatch = sortUpdatesPerFrame > 0 ? grid(new Random(7), verticesPerDraw) : null;
     Batch smallBatch = transientDraws > 0 ? grid(random, 40) : null;
     List<Mesh> pending = new ArrayList<>();
     Batch rebuildBatch = rebuildsPerFrame > 0 ? grid(random, 8000) : null;
@@ -195,6 +205,9 @@ public final class RenderBench {
         if (!pipelines.submit(smallBatch, context, matrix, texMatrix, tint)) {
           throw new IllegalStateException("transient submit rejected");
         }
+      }
+      for (int u = 0; u < sortUpdatesPerFrame; u++) {
+        meshes.get(u).updateIndices(sortBatch);
       }
       if (rebuildsPerFrame > 0) {
         for (Mesh old : pending) old.close();
@@ -283,6 +296,39 @@ public final class RenderBench {
         mesh.close();
       }
     }
+  }
+
+  private static void exhaustTransient(
+      Backend backend, PipelineSet pipelines, DrawContext context) {
+    float[] matrix = new float[16];
+    new Matrix4f().identity().get(matrix);
+    float[] texMatrix = new float[16];
+    new Matrix4f().identity().get(texMatrix);
+    float[] tint = {1, 1, 1, 1};
+    Batch big = grid(new Random(9), 4000);
+    Batch small = grid(new Random(9), 4);
+    backend.beginFrame(new FrameSize(WIDTH, HEIGHT));
+    boolean beforeBig =
+        net.dx12mc.graphics.bgfx.TransientPressure.insufficient(
+            pipelines.layout(), 4000, big.indexCount(), false);
+    int accepted = 0;
+    while (accepted < 100_000 && pipelines.submit(big, context, matrix, texMatrix, tint)) {
+      accepted++;
+    }
+    boolean afterBig =
+        net.dx12mc.graphics.bgfx.TransientPressure.insufficient(
+            pipelines.layout(), 4000, big.indexCount(), false);
+    boolean afterSmall =
+        net.dx12mc.graphics.bgfx.TransientPressure.insufficient(
+            pipelines.layout(), 4, small.indexCount(), false);
+    backend.endFrame();
+    backend.beginFrame(new FrameSize(WIDTH, HEIGHT));
+    boolean recovered = pipelines.submit(big, context, matrix, texMatrix, tint);
+    backend.endFrame();
+    System.out.printf(
+        "transient exhaustion: accepted=%d (%.1f MiB vertices) insufficientBefore=%b"
+            + " insufficientAfterBig=%b insufficientAfterSmall=%b recoveredNextFrame=%b%n",
+        accepted, accepted * 4000 * 32 / 1048576.0, beforeBig, afterBig, afterSmall, recovered);
   }
 
   private static long triangles(
