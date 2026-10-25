@@ -3,26 +3,30 @@ import java.security.MessageDigest
 import java.util.Locale
 
 plugins {
-    id("fabric-loom") version "1.11.8"
+    id("fabric-loom")
     `maven-publish`
     signing
 }
 
-version = property("mod_version") as String
-group = property("maven_group") as String
+fun prop(name: String): String = property(name) as String
+
+version = prop("mod_version")
+group = prop("maven_group")
 base {
-    archivesName.set(property("archives_base_name") as String)
+    archivesName.set(prop("archives_base_name"))
 }
 
 repositories {
     mavenCentral()
 }
 
-val minecraftVersion = property("minecraft_version") as String
-val loaderVersion = property("loader_version") as String
-val lwjglVersion = property("lwjgl_version") as String
-val githubRepository = providers.environmentVariable("GITHUB_REPOSITORY").orElse("TamKungZ/DX12MC")
-val signingKeyCandidates = listOf("dev@tamkungz.me", "kitthiwat.phimpromma@proton.me")
+val minecraftVersion = prop("minecraft_version")
+val loaderVersion = prop("loader_version")
+val lwjglVersion = prop("lwjgl_version")
+val javaVersion = prop("java_version").toInt()
+val githubUrl = prop("github_url")
+val githubRepository = providers.environmentVariable("GITHUB_REPOSITORY").orElse(prop("github_repository"))
+val signingKeyCandidates = prop("signing_key_candidates").split(",").map { it.trim() }.filter { it.isNotEmpty() }
 
 fun gpgHasSecretKey(keyName: String): Boolean {
     return try {
@@ -48,9 +52,10 @@ val shadercCache = File(
     "caches/dx12mc/bgfx-$lwjglVersion/windows-x64/shaderc.exe"
 )
 
-val shadercSha256ByLwjglVersion = mapOf(
-    "3.3.3" to "aa25dea6e9598018e7ad53af2b19bf1710fb91548ca63d6038be031b2b7ab1bb"
-)
+val shadercProfile = prop("shaderc_profile")
+val shadercOptimization = prop("shaderc_optimization")
+val shadercDownloadBase = prop("lwjgl_release_url")
+val formatterMaxHeap = prop("formatter_max_heap")
 
 val shaderSourceDir = layout.projectDirectory.dir("src/main/shaders")
 val generatedShaderRoot = layout.buildDirectory.dir("generated/dx12mc-shaders")
@@ -78,10 +83,10 @@ val prepareShaderc by tasks.registering {
                 input.read() == 'M'.code && input.read() == 'Z'.code
             }
         }
-        val expectedSha256 = shadercSha256ByLwjglVersion[lwjglVersion]
+        val expectedSha256 = findProperty("shaderc_sha256_$lwjglVersion") as String?
             ?: throw GradleException(
                 "No pinned SHA-256 for bgfx shaderc $lwjglVersion. " +
-                    "Add it to shadercSha256ByLwjglVersion in build.gradle.kts."
+                    "Add shaderc_sha256_$lwjglVersion to gradle.properties."
             )
         fun sha256(file: File): String {
             val digest = MessageDigest.getInstance("SHA-256")
@@ -129,7 +134,7 @@ val prepareShaderc by tasks.registering {
             )
         }
         val candidates = listOf(
-            "https://build.lwjgl.org/release/$lwjglVersion/windows/x64/bgfx-tools/shaderc.exe"
+            "$shadercDownloadBase/$lwjglVersion/windows/x64/bgfx-tools/shaderc.exe"
         )
         val temp = File(shadercCache.parentFile, "shaderc.download")
         var lastError: Throwable? = null
@@ -261,10 +266,10 @@ val compileD3D12Shaders by tasks.registering {
                 "-o", outputFile.absolutePath,
                 "--type", spec.type,
                 "--platform", "windows",
-                "-p", "s_5_0",
+                "-p", shadercProfile,
                 "--varyingdef", varyingFile.absolutePath,
                 "-i", shaderSourceDir.asFile.absolutePath,
-                "-O", "3"
+                "-O", shadercOptimization
             )
             logger.lifecycle("DX12MC shaderc: ${spec.name}.sc")
             val process = ProcessBuilder(command)
@@ -324,13 +329,13 @@ dependencies {
     include("org.lwjgl:lwjgl-bgfx:$lwjglVersion")
     runtimeOnly("org.lwjgl:lwjgl-bgfx:$lwjglVersion:natives-windows")
     bgfxWindowsNatives("org.lwjgl:lwjgl-bgfx:$lwjglVersion:natives-windows")
-    javaFormatter("com.google.googlejavaformat:google-java-format:1.36.1")
-    testImplementation(platform("org.junit:junit-bom:5.11.4"))
+    javaFormatter("com.google.googlejavaformat:google-java-format:${prop("google_java_format_version")}")
+    testImplementation(platform("org.junit:junit-bom:${prop("junit_version")}"))
     testImplementation("org.junit.jupiter:junit-jupiter")
 }
 
 java {
-    toolchain.languageVersion.set(JavaLanguageVersion.of(21))
+    toolchain.languageVersion.set(JavaLanguageVersion.of(javaVersion))
     withSourcesJar()
 }
 
@@ -338,10 +343,10 @@ loom {
     runs {
         named("client") {
             client()
-            val mode = providers.systemProperty("dx12mc.mode").orElse("native")
-            val vsync = providers.systemProperty("dx12mc.vsync").orElse("false")
-            val clear = providers.systemProperty("dx12mc.clear").orElse("18202AFF")
-            val overlay = providers.systemProperty("dx12mc.overlay").orElse("false")
+            val mode = providers.systemProperty("dx12mc.mode").orElse(prop("run_mode"))
+            val vsync = providers.systemProperty("dx12mc.vsync").orElse(prop("run_vsync"))
+            val clear = providers.systemProperty("dx12mc.clear").orElse(prop("run_clear"))
+            val overlay = providers.systemProperty("dx12mc.overlay").orElse(prop("run_overlay"))
             vmArg("-Ddx12mc.mode=${mode.get()}")
             vmArg("-Ddx12mc.vsync=${vsync.get()}")
             vmArg("-Ddx12mc.clear=${clear.get()}")
@@ -376,7 +381,7 @@ tasks.jar {
 }
 
 tasks.withType<JavaCompile>().configureEach {
-    options.release.set(21)
+    options.release.set(javaVersion)
     options.encoding = "UTF-8"
 }
 
@@ -398,7 +403,7 @@ tasks.register<JavaExec>("formatJava") {
     description = "Formats Java source files with google-java-format."
     classpath = javaFormatter
     mainClass.set("com.google.googlejavaformat.java.Main")
-    maxHeapSize = "128m"
+    maxHeapSize = formatterMaxHeap
     jvmArgs(googleJavaFormatJvmArgs)
     args("--replace")
     args(javaSourceFiles())
@@ -409,7 +414,7 @@ tasks.register<JavaExec>("checkJavaFormat") {
     description = "Checks Java source formatting with google-java-format."
     classpath = javaFormatter
     mainClass.set("com.google.googlejavaformat.java.Main")
-    maxHeapSize = "128m"
+    maxHeapSize = formatterMaxHeap
     jvmArgs(googleJavaFormatJvmArgs)
     args("--dry-run", "--set-exit-if-changed")
     args(javaSourceFiles())
@@ -451,7 +456,7 @@ tasks.register("verifyDX12MC") {
 }
 
 tasks.remapJar {
-    archiveFileName.set("dx12mc-${project.version}.jar")
+    archiveFileName.set("${prop("archives_base_name")}-${project.version}.jar")
 }
 
 extra["signing.gnupg.keyName"] = signingKeyName ?: signingKeyCandidates.first()
@@ -461,30 +466,30 @@ fun hasSigningKey(): Boolean = signingKeyName != null
 publishing {
     publications {
         create<MavenPublication>("mavenJava") {
-            artifactId = property("archives_base_name") as String
+            artifactId = prop("archives_base_name")
             from(components["java"])
             pom {
-                name.set("DX12MC")
-                description.set("Client-side Fabric mod that routes selected Minecraft Java rendering work through Direct3D 12 using bgfx.")
-                url.set("https://github.com/${githubRepository.get()}")
+                name.set(prop("pom_name"))
+                description.set(prop("pom_description"))
+                url.set("$githubUrl/${githubRepository.get()}")
                 licenses {
                     license {
-                        name.set("GNU General Public License v3.0")
-                        url.set("https://www.gnu.org/licenses/gpl-3.0.html")
+                        name.set(prop("license_name"))
+                        url.set(prop("license_url"))
                     }
                 }
                 developers {
                     developer {
-                        id.set("tamkungz")
-                        name.set("TamKungZ_")
-                        email.set("dev@tamkungz.me")
+                        id.set(prop("developer_id"))
+                        name.set(prop("developer_name"))
+                        email.set(prop("developer_email"))
                         roles.add("maintainer")
                     }
                 }
                 scm {
-                    connection.set("scm:git:https://github.com/${githubRepository.get()}.git")
-                    developerConnection.set("scm:git:ssh://git@github.com/${githubRepository.get()}.git")
-                    url.set("https://github.com/${githubRepository.get()}")
+                    connection.set("scm:git:$githubUrl/${githubRepository.get()}.git")
+                    developerConnection.set("scm:git:ssh://git@${githubUrl.removePrefix("https://")}/${githubRepository.get()}.git")
+                    url.set("$githubUrl/${githubRepository.get()}")
                 }
             }
         }
@@ -492,11 +497,11 @@ publishing {
     repositories {
         maven {
             name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/${githubRepository.get()}")
+            url = uri("${prop("github_packages_url")}/${githubRepository.get()}")
             credentials {
                 username = providers.gradleProperty("gpr.user")
                     .orElse(providers.environmentVariable("GITHUB_ACTOR"))
-                    .orElse("tamkungz")
+                    .orElse(prop("developer_id"))
                     .get()
                 password = providers.gradleProperty("gpr.key")
                     .orElse(providers.environmentVariable("GITHUB_TOKEN"))
