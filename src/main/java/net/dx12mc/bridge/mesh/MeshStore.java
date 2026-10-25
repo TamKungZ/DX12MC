@@ -22,6 +22,9 @@ public final class MeshStore implements AutoCloseable {
   private static final long MAX_RESIDENT_STATIC_BYTES =
       Math.max(64L << 20, Long.getLong("dx12mc.mesh.cache.bytes", 256L << 20));
 
+  private static final int MAX_CREATES_PER_FRAME =
+      Math.max(1, Integer.getInteger("dx12mc.mesh.createsPerFrame", 4));
+
   private final Stats stats;
   private final Set<Slot> slots = Collections.newSetFromMap(new IdentityHashMap<>());
   private final LinkedHashMap<Slot, ResidentMesh> residents = new LinkedHashMap<>(256, 0.75f, true);
@@ -29,6 +32,7 @@ public final class MeshStore implements AutoCloseable {
   private long cpuBytes;
   private long frameBoundary;
   private boolean allocationBackoff;
+  private int createdThisFrame;
 
   public MeshStore(Stats stats) {
     this.stats = stats;
@@ -101,12 +105,14 @@ public final class MeshStore implements AutoCloseable {
       touch(slot);
       return gpu;
     }
+    if (createdThisFrame >= MAX_CREATES_PER_FRAME) return null;
     if (allocationBackoff || !ensureCapacity(slot, Mesh.estimatedBytes(slot.batch()))) {
       allocationBackoff = true;
       return null;
     }
     try {
       gpu = Mesh.create(slot.batch(), layout);
+      createdThisFrame++;
       slot.mesh(gpu);
       touch(slot);
       return gpu;
@@ -137,6 +143,7 @@ public final class MeshStore implements AutoCloseable {
 
   public void onFrameBoundary() {
     allocationBackoff = false;
+    createdThisFrame = 0;
     frameBoundary++;
   }
 
