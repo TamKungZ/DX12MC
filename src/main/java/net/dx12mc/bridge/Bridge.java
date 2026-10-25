@@ -476,12 +476,21 @@ public final class Bridge implements AutoCloseable {
         continue;
       }
       contexts.sectionMatrix(regions.transform(region));
-      for (int pageIndex = 0; pageIndex < region.pageCount(); pageIndex++) {
-        SectionRegionBatcher.Page page = region.page(pageIndex);
-        boolean success = submitPersistent(page.mesh(), context);
+      int runs = region.visibleRuns();
+      for (int run = 0; run < runs; run++) {
+        SectionRegionBatcher.Page page = region.page(region.runPage(run));
+        Mesh mesh = page.mesh();
+        boolean wholePage = region.runIndexCount(run) == page.indexCount();
+        if (!wholePage) mesh.drawRange(region.runFirstIndex(run), region.runIndexCount(run));
+        boolean success;
+        try {
+          success = submitPersistent(mesh, context);
+        } finally {
+          if (!wholePage) mesh.drawAll();
+        }
         stats.submittedRegionPage(
-            page.vertexCount(),
-            page.indexCount(),
+            region.runVertexCount(run),
+            region.runIndexCount(run),
             success,
             context.textured(),
             context.lightmapped());
