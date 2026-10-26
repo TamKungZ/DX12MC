@@ -14,8 +14,11 @@ final class TextureEntry implements AutoCloseable {
               Math.max(64L << 10, Long.getLong("dx12mc.texture.maxUploadChunkBytes", 4L << 20)));
 
   final Image image;
+  final SamplerState sampler;
   boolean authoritativeDimensions;
   private final Stats stats;
+  private long appliedSamplerRevision = -1;
+  private Texture appliedTexture;
   private Texture gpu;
   private boolean gpuReady;
   private long gpuRevision = -1;
@@ -24,15 +27,16 @@ final class TextureEntry implements AutoCloseable {
   private long pressureBoundary = -1;
   private StagingBackpressureException deferredPressure;
 
-  TextureEntry(Image image, boolean authoritativeDimensions, Stats stats) {
+  TextureEntry(Image image, SamplerState sampler, boolean authoritativeDimensions, Stats stats) {
     this.image = image;
+    this.sampler = sampler;
     this.authoritativeDimensions = authoritativeDimensions;
     this.stats = stats;
   }
 
   Texture resolve(int textureId, long frameBoundary, long registryCpuBytes) {
     if (pressureBoundary == frameBoundary && deferredPressure != null) {
-      if (usableGpu()) return gpu;
+      if (usableGpu()) return applySampler(gpu);
       throw deferredPressure;
     }
     try {
@@ -42,13 +46,13 @@ final class TextureEntry implements AutoCloseable {
       pressureBoundary = -1;
       deferredPressure = null;
       stats.nativeStaging(StagingMemory.outstandingBytes(), StagingMemory.peakBytes());
-      return gpu;
+      return applySampler(gpu);
     } catch (StagingBackpressureException pressure) {
       stats.textureGpuDeferred();
       stats.nativeStaging(StagingMemory.outstandingBytes(), StagingMemory.peakBytes());
       pressureBoundary = frameBoundary;
       deferredPressure = pressure;
-      if (usableGpu()) return gpu;
+      if (usableGpu()) return applySampler(gpu);
       throw pressure;
     } catch (Throwable throwable) {
       close();
@@ -63,20 +67,21 @@ final class TextureEntry implements AutoCloseable {
             && dirtyUploads == null
             && gpu != null
             && gpu.valid()
-        ? gpu
+        ? applySampler(gpu)
         : null;
+  }
+
+  private Texture applySampler(Texture texture) {
+    if (appliedSamplerRevision == sampler.revision() && texture == appliedTexture) return texture;
+    texture.sampler(sampler.bgfxFlags(), sampler.maxLod(image.maxLevel()));
+    appliedSamplerRevision = sampler.revision();
+    appliedTexture = texture;
+    return texture;
   }
 
   private void createGpuIfNeeded() {
     if (gpu != null && gpu.valid()) return;
-    gpu =
-        Texture.create(
-            image.width(),
-            image.height(),
-            image.maxLevel(),
-            image.blur(),
-            image.clamp(),
-            image.mipmap());
+    gpu = Texture.create(image.width(), image.height(), image.maxLevel());
     gpuReady = false;
     initialUploads = new UploadQueue(image.fullUploads(), image.revision());
     image.clearDirty();
@@ -120,10 +125,7 @@ final class TextureEntry implements AutoCloseable {
           upload.width(),
           band.rows(),
           upload.rgba(),
-          band.sourceOffset(),
-          image.blur(),
-          image.clamp(),
-          image.mipmap());
+          band.sourceOffset());
       queue.submitted(band);
     }
   }
