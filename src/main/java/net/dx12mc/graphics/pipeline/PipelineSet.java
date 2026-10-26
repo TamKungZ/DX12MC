@@ -7,127 +7,89 @@ import net.dx12mc.bridge.mesh.Batch;
 import net.dx12mc.graphics.bgfx.Layout;
 import net.dx12mc.graphics.bgfx.Mesh;
 import net.dx12mc.graphics.bgfx.QuadIndices;
+import org.lwjgl.bgfx.BGFXVertexLayout;
 
 public final class PipelineSet implements AutoCloseable {
   private Layout layout;
+  private Layout entityLayout;
   private QuadIndices quadIndices;
-  private ColorPipeline color;
-  private TexturePipeline texture;
-  private LightmapTexturePipeline lightmapTexture;
+  private Uniforms uniforms;
+  private final ShaderPipeline[] pipelines = new ShaderPipeline[DrawContext.Kind.values().length];
   private int preparedSectionPipeline = -1;
 
   public void start() {
     if (layout != null) return;
-    layout = new Layout();
-    quadIndices = new QuadIndices();
-    color = new ColorPipeline(layout);
-    texture = new TexturePipeline(layout);
-    lightmapTexture = new LightmapTexturePipeline(layout);
+    try {
+      layout = new Layout();
+      entityLayout = Layout.entity();
+      quadIndices = new QuadIndices();
+      uniforms = new Uniforms();
+      create(
+          DrawContext.Kind.COLOR,
+          layout,
+          "vs_position_color",
+          "fs_position_color",
+          "fs_position_color_alpha");
+      create(
+          DrawContext.Kind.COLOR_LIGHT,
+          layout,
+          "vs_position_color_light",
+          "fs_position_color",
+          "fs_position_color_alpha");
+      create(
+          DrawContext.Kind.TEXTURE,
+          layout,
+          "vs_position_color_tex",
+          "fs_position_color_tex",
+          "fs_position_color_tex_cutout");
+      create(
+          DrawContext.Kind.TEXTURE_LIGHT,
+          layout,
+          "vs_position_color_tex_light",
+          "fs_position_color_tex",
+          "fs_position_color_tex_cutout");
+      create(DrawContext.Kind.ENTITY, entityLayout, "vs_entity", "fs_entity", "fs_entity_cutout");
+    } catch (Throwable throwable) {
+      close();
+      throw throwable;
+    }
   }
 
   public boolean started() {
-    return layout != null && color != null && texture != null && lightmapTexture != null;
+    for (ShaderPipeline pipeline : pipelines) if (pipeline == null) return false;
+    return layout != null;
   }
 
-  public org.lwjgl.bgfx.BGFXVertexLayout layout() {
+  public BGFXVertexLayout layout() {
     if (!started()) throw new IllegalStateException("native pipelines are not initialized");
     return layout.value();
   }
 
-  public boolean submit(
-      Batch batch, DrawContext context, float[] matrix, float[] textureMatrix, float[] tint) {
-    if (!context.textured()) return color.submit(batch, matrix, tint, context.state());
-    if (context.lightmapped()) {
-      return lightmapTexture.submit(
-          batch,
-          context.texture(),
-          context.lightmap(),
-          matrix,
-          textureMatrix,
-          tint,
-          context.state(),
-          context.cutout());
-    }
-    return texture.submit(
-        batch, context.texture(), matrix, textureMatrix, tint, context.state(), context.cutout());
+  public BGFXVertexLayout layout(DrawContext context) {
+    if (!started()) throw new IllegalStateException("native pipelines are not initialized");
+    return pipeline(context, false).layout().value();
   }
 
-  public boolean submitSection(
-      Batch batch, DrawContext context, float[] matrix, float[] textureMatrix, float[] tint) {
-    int selected = selectedPipeline(context);
-    boolean reuseState = preparedSectionPipeline == selected;
-    boolean submitted =
-        !context.textured()
-            ? color.submitSection(batch, matrix, tint, context.state(), reuseState)
-            : context.lightmapped()
-                ? lightmapTexture.submitSection(
-                    batch,
-                    context.texture(),
-                    context.lightmap(),
-                    matrix,
-                    textureMatrix,
-                    tint,
-                    context.state(),
-                    context.cutout(),
-                    reuseState)
-                : texture.submitSection(
-                    batch,
-                    context.texture(),
-                    matrix,
-                    textureMatrix,
-                    tint,
-                    context.state(),
-                    context.cutout(),
-                    reuseState);
+  public boolean submit(Batch batch, DrawContext context) {
+    return pipeline(context, false).submit(batch, context, false, false);
+  }
+
+  public boolean submitSection(Batch batch, DrawContext context) {
+    ShaderPipeline pipeline = pipeline(context, false);
+    int selected = selected(context, pipeline);
+    boolean submitted = pipeline.submit(batch, context, preparedSectionPipeline == selected, true);
     if (submitted) preparedSectionPipeline = selected;
     return submitted;
   }
 
-  public boolean submit(
-      Mesh mesh, DrawContext context, float[] matrix, float[] textureMatrix, float[] tint) {
-    if (!context.textured()) return color.submit(mesh, matrix, tint, context.state());
-    if (context.lightmapped()) {
-      return lightmapTexture.submit(
-          mesh,
-          context.texture(),
-          context.lightmap(),
-          matrix,
-          textureMatrix,
-          tint,
-          context.state(),
-          context.cutout());
-    }
-    return texture.submit(
-        mesh, context.texture(), matrix, textureMatrix, tint, context.state(), context.cutout());
+  public boolean submit(Mesh mesh, DrawContext context) {
+    return pipeline(context, true).submit(mesh, context, false, false);
   }
 
-  public boolean submitSection(
-      Mesh mesh, DrawContext context, float[] matrix, float[] textureMatrix, float[] tint) {
-    int selected = selectedPipeline(context);
-    boolean reuseState = preparedSectionPipeline == selected;
-    boolean submitted =
-        !context.textured()
-            ? color.submitSection(mesh, matrix, tint, context.state(), reuseState)
-            : context.lightmapped()
-                ? lightmapTexture.submitSection(
-                    mesh,
-                    context.texture(),
-                    context.lightmap(),
-                    matrix,
-                    textureMatrix,
-                    tint,
-                    context.state(),
-                    context.cutout(),
-                    reuseState)
-                : texture.submitSection(
-                    mesh,
-                    context.texture(),
-                    matrix,
-                    textureMatrix,
-                    tint,
-                    context.state(),
-                    context.cutout(),
-                    reuseState);
+  public boolean submitSection(Mesh mesh, DrawContext context) {
+    ShaderPipeline pipeline = pipeline(context, true);
+    int selected = selected(context, pipeline);
+    boolean submitted = pipeline.submit(mesh, context, preparedSectionPipeline == selected, true);
     if (submitted) preparedSectionPipeline = selected;
     return submitted;
   }
@@ -141,21 +103,23 @@ public final class PipelineSet implements AutoCloseable {
   @Override
   public void close() {
     endSectionLayer();
-    if (lightmapTexture != null) {
-      lightmapTexture.close();
-      lightmapTexture = null;
+    for (int i = 0; i < pipelines.length; i++) {
+      if (pipelines[i] != null) {
+        pipelines[i].close();
+        pipelines[i] = null;
+      }
     }
-    if (texture != null) {
-      texture.close();
-      texture = null;
-    }
-    if (color != null) {
-      color.close();
-      color = null;
+    if (uniforms != null) {
+      uniforms.close();
+      uniforms = null;
     }
     if (quadIndices != null) {
       quadIndices.close();
       quadIndices = null;
+    }
+    if (entityLayout != null) {
+      entityLayout.close();
+      entityLayout = null;
     }
     if (layout != null) {
       layout.close();
@@ -163,9 +127,21 @@ public final class PipelineSet implements AutoCloseable {
     }
   }
 
-  private static int selectedPipeline(DrawContext context) {
-    if (!context.textured()) return 0;
-    if (!context.lightmapped()) return context.cutout() ? 2 : 1;
-    return context.cutout() ? 4 : 3;
+  private void create(
+      DrawContext.Kind kind, Layout layout, String vertex, String fragment, String alphaTest) {
+    pipelines[kind.ordinal()] =
+        new ShaderPipeline(kind, layout, uniforms, vertex, fragment, alphaTest);
+  }
+
+  private ShaderPipeline pipeline(DrawContext context, boolean persistent) {
+    DrawContext.Kind kind = context.kind();
+    if (persistent && kind == DrawContext.Kind.ENTITY) kind = DrawContext.Kind.TEXTURE_LIGHT;
+    return pipelines[kind.ordinal()];
+  }
+
+  private int selected(DrawContext context, ShaderPipeline pipeline) {
+    int index = 0;
+    while (pipelines[index] != pipeline) index++;
+    return index * 2 + (context.alphaTest() ? 1 : 0);
   }
 }
