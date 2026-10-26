@@ -63,13 +63,16 @@ val generatedShaderDir = generatedShaderRoot.map { it.dir("assets/dx12mc/shaders
 data class ShaderSpec(val name: String, val type: String, val magic: Char)
 val shaderSpecs = listOf(
     ShaderSpec("vs_position_color", "vertex", 'V'),
+    ShaderSpec("vs_position_color_light", "vertex", 'V'),
     ShaderSpec("fs_position_color", "fragment", 'F'),
+    ShaderSpec("fs_position_color_alpha", "fragment", 'F'),
     ShaderSpec("vs_position_color_tex", "vertex", 'V'),
+    ShaderSpec("vs_position_color_tex_light", "vertex", 'V'),
     ShaderSpec("fs_position_color_tex", "fragment", 'F'),
     ShaderSpec("fs_position_color_tex_cutout", "fragment", 'F'),
-    ShaderSpec("vs_position_color_tex_light", "vertex", 'V'),
-    ShaderSpec("fs_position_color_tex_light", "fragment", 'F'),
-    ShaderSpec("fs_position_color_tex_light_cutout", "fragment", 'F')
+    ShaderSpec("vs_entity", "vertex", 'V'),
+    ShaderSpec("fs_entity", "fragment", 'F'),
+    ShaderSpec("fs_entity_cutout", "fragment", 'F')
 )
 
 val prepareShaderc by tasks.registering {
@@ -206,15 +209,31 @@ val validateD3D12ShaderSources by tasks.registering {
                 throw GradleException("texture.sh contains an invalid HLSL sampler form: $needle")
             }
         }
+        val vanillaConstants = listOf(
+            "(light0 + light1) * 0.6 + 0.4",
+            "clamp(_uv2 / 256.0, vec2_splat(0.5 / 16.0), vec2_splat(15.5 / 16.0))",
+            "(floor(_uv2 / 16.0) + vec2_splat(0.5)) / 16.0",
+            "smoothstep(_params.x, _params.y, _distance)",
+            "smoothstep(_params.y, _params.x, _distance)",
+            "max(length(_pos.xz), abs(_pos.y))"
+        )
+        for (needle in vanillaConstants) {
+            if (!common.contains(needle)) {
+                throw GradleException("common.sh no longer matches vanilla fog/light/lightmap math: $needle")
+            }
+        }
         val expectedIncludes = mapOf(
             "vs_position_color.sc" to "#include \"common.sh\"",
+            "vs_position_color_light.sc" to "#include \"texture.sh\"",
             "fs_position_color.sc" to "#include \"common.sh\"",
+            "fs_position_color_alpha.sc" to "#include \"common.sh\"",
             "vs_position_color_tex.sc" to "#include \"common.sh\"",
+            "vs_position_color_tex_light.sc" to "#include \"texture.sh\"",
             "fs_position_color_tex.sc" to "#include \"texture.sh\"",
             "fs_position_color_tex_cutout.sc" to "#include \"texture.sh\"",
-            "vs_position_color_tex_light.sc" to "#include \"common.sh\"",
-            "fs_position_color_tex_light.sc" to "#include \"texture.sh\"",
-            "fs_position_color_tex_light_cutout.sc" to "#include \"texture.sh\""
+            "vs_entity.sc" to "#include \"texture.sh\"",
+            "fs_entity.sc" to "#include \"texture.sh\"",
+            "fs_entity_cutout.sc" to "#include \"texture.sh\""
         )
         expectedIncludes.forEach { (name, include) ->
             val text = shaderSourceDir.file(name).asFile.readText()
@@ -222,20 +241,38 @@ val validateD3D12ShaderSources by tasks.registering {
                 throw GradleException("$name must contain $include")
             }
         }
-        val texturedFragment = shaderSourceDir.file("fs_position_color_tex.sc").asFile.readText()
-        if (!texturedFragment.contains("SAMPLER2D(s_texColor, 0)")) {
-            throw GradleException("Textured fragment shader is missing s_texColor")
-        }
-        val lightFragment = shaderSourceDir.file("fs_position_color_tex_light.sc").asFile.readText()
-        if (!lightFragment.contains("SAMPLER2D(s_texColor, 0)") ||
-            !lightFragment.contains("SAMPLER2D(s_lightmap, 2)")) {
-            throw GradleException("Lightmapped fragment shader must bind Sampler0 and Sampler2")
-        }
-        for (name in listOf("fs_position_color_tex_cutout.sc", "fs_position_color_tex_light_cutout.sc")) {
-            val cutout = shaderSourceDir.file(name).asFile.readText()
-            if (!cutout.contains("discard") || !cutout.contains("color.a < 0.1") && !cutout.contains("base.a < 0.1")) {
-                throw GradleException("$name must preserve vanilla alpha-cutout semantics")
+        fun requireAll(name: String, needles: List<String>) {
+            val text = shaderSourceDir.file(name).asFile.readText()
+            for (needle in needles) {
+                if (!text.contains(needle)) throw GradleException("$name is missing $needle")
             }
+        }
+        for (name in listOf("vs_position_color.sc", "vs_position_color_light.sc", "vs_position_color_tex.sc",
+                "vs_position_color_tex_light.sc", "vs_entity.sc")) {
+            requireAll(name, listOf("uniform mat4 u_fogModel;", "dx12mcFogDistance(mul(u_fogModel, clip).xyz"))
+        }
+        for (name in listOf("vs_position_color_light.sc", "vs_position_color_tex_light.sc", "vs_entity.sc")) {
+            requireAll(name, listOf("SAMPLER2D(s_lightmap, 2)", "dx12mcLightmapUv(a_texcoord2, u_lightParams.x)"))
+        }
+        requireAll("vs_entity.sc", listOf(
+            "SAMPLER2D(s_overlay, 1)", "dx12mcMixLight(u_lightDir0.xyz, u_lightDir1.xyz, normal, a_color0)"))
+        val fragments = listOf(
+            "fs_position_color.sc", "fs_position_color_alpha.sc", "fs_position_color_tex.sc",
+            "fs_position_color_tex_cutout.sc", "fs_entity.sc", "fs_entity_cutout.sc")
+        for (name in fragments) {
+            requireAll(name, listOf("uniform vec4 u_fogParams;", "uniform vec4 u_fogColor;", "dx12mcApplyFog("))
+            val discards = shaderSourceDir.file(name).asFile.readText().contains("discard")
+            val alphaVariant = name.endsWith("_cutout.sc") || name.endsWith("_alpha.sc")
+            if (discards != alphaVariant) {
+                throw GradleException("$name: only alpha-test variants may discard, so opaque programs keep early depth")
+            }
+            if (alphaVariant) requireAll(name, listOf("uniform vec4 u_material;", "< u_material.x) discard;"))
+        }
+        for (name in listOf("fs_position_color_tex.sc", "fs_position_color_tex_cutout.sc", "fs_entity.sc", "fs_entity_cutout.sc")) {
+            requireAll(name, listOf("SAMPLER2D(s_texColor, 0)", "dx12mcTexture2DMaxLod(s_texColor, v_texcoord0, u_texLod.x)"))
+        }
+        for (name in listOf("fs_entity.sc", "fs_entity_cutout.sc")) {
+            requireAll(name, listOf("color.rgb = lerp(v_overlay.rgb, color.rgb, v_overlay.a);", "color * v_light"))
         }
     }
 }
@@ -255,6 +292,8 @@ val compileD3D12Shaders by tasks.registering {
         val varyingFile = shaderSourceDir.file("varying.def.sc").asFile
         val outputDir = generatedShaderDir.get().asFile
         outputDir.mkdirs()
+        outputDir.listFiles { file -> file.extension == "bin" && shaderSpecs.none { it.name == file.nameWithoutExtension } }
+            ?.forEach { it.delete() }
         val failures = mutableListOf<String>()
         for (spec in shaderSpecs) {
             val inputFile = shaderSourceDir.file("${spec.name}.sc").asFile
@@ -365,7 +404,7 @@ tasks.processResources {
 }
 
 val installedShaderRoot = layout.buildDirectory.dir("generated/dx12mc-installed-resources")
-val installD3D12Shaders by tasks.registering(Copy::class) {
+val installD3D12Shaders by tasks.registering(Sync::class) {
     group = "dx12mc verification"
     description = "Stages verified D3D12 shader binaries for inclusion in the distributable JAR."
     dependsOn(verifyD3D12Shaders)
