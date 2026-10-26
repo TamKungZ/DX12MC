@@ -34,6 +34,35 @@ public abstract class GlStateManagerMixin {
     }
   }
 
+  @Inject(method = "_texParameter(III)V", at = @At("HEAD"), remap = false)
+  private static void dx12mc$texParameter(int target, int pname, int value, CallbackInfo ci) {
+    DX12MC.runtime().texParameter(target, pname, value);
+  }
+
+  @Inject(method = "_texParameter(IIF)V", at = @At("HEAD"), remap = false)
+  private static void dx12mc$texParameterFloat(
+      int target, int pname, float value, CallbackInfo ci) {
+    DX12MC.runtime().texParameter(target, pname, value);
+  }
+
+  @Inject(method = "_clearColor(FFFF)V", at = @At("HEAD"), remap = false, cancellable = true)
+  private static void dx12mc$clearColor(
+      float red, float green, float blue, float alpha, CallbackInfo ci) {
+    DX12MC.runtime().clearColor(red, green, blue, alpha);
+    dx12mc$suppressLegacyState(ci);
+  }
+
+  @Inject(method = "_clearDepth(D)V", at = @At("HEAD"), remap = false, cancellable = true)
+  private static void dx12mc$clearDepth(double depth, CallbackInfo ci) {
+    DX12MC.runtime().clearDepth(depth);
+    dx12mc$suppressLegacyState(ci);
+  }
+
+  @Inject(method = "_clear(IZ)V", at = @At("HEAD"), remap = false, cancellable = true)
+  private static void dx12mc$clear(int mask, boolean checkError, CallbackInfo ci) {
+    if (DX12MC.runtime().clear(mask)) ci.cancel();
+  }
+
   @Inject(method = "_deleteTexture(I)V", at = @At("HEAD"), remap = false)
   private static void dx12mc$delete(int texture, CallbackInfo ci) {
     DX12MC.runtime().deleteTexture(texture);
