@@ -40,8 +40,8 @@ public record Batch(
       throw new IllegalArgumentException("uv2 count does not match vertexCount/hasUv2");
     if (normals.length < (hasNormal ? (long) vertexCount * 3 : 0))
       throw new IllegalArgumentException("normal count does not match vertexCount/hasNormal");
-    if (indexCount <= 0 || indexCount > indices.length || indexCount % 3 != 0)
-      throw new IllegalArgumentException("native pipeline requires triangle-list indices");
+    if (indexCount > indices.length || !Indices.completePrimitives(sourceMode, indexCount))
+      throw new IllegalArgumentException("native pipeline requires complete primitives");
     if (vertexCount == 0) throw new IllegalArgumentException("indices require at least one vertex");
   }
 
