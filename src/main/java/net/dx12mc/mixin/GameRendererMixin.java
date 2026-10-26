@@ -1,5 +1,6 @@
 package net.dx12mc.mixin;
 
+import java.nio.file.Path;
 import net.dx12mc.DX12MC;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
@@ -30,10 +31,22 @@ public abstract class GameRendererMixin {
     }
   }
 
-  @Inject(method = "tryTakeScreenshotIfNeeded()V", at = @At("HEAD"), cancellable = true)
-  private void dx12mc$suppressAutomaticWorldIconCapture(CallbackInfo ci) {
-    if (DX12MC.runtime().suppressAutomaticWorldIconCapture()) {
-      ci.cancel();
-    }
+  @Inject(
+      method = "takeAutoScreenshot(Ljava/nio/file/Path;)V",
+      at =
+          @At(
+              value = "INVOKE",
+              target =
+                  "Lnet/minecraft/client/Screenshot;takeScreenshot(Lcom/mojang/blaze3d/pipeline/RenderTarget;)Lcom/mojang/blaze3d/platform/NativeImage;"),
+      cancellable = true)
+  private void dx12mc$captureWorldIconFromD3D12(Path path, CallbackInfo ci) {
+    if (!DX12MC.runtime().ownsScreenCapture() || DX12MC.runtime().hasCapturedScreenshot()) return;
+    ci.cancel();
+    GameRendererInvoker self = (GameRendererInvoker) this;
+    DX12MC
+        .runtime()
+        .requestScreenCapture(
+            () -> self.dx12mc$takeAutoScreenshot(path),
+            reason -> DX12MC.LOGGER.warn("World icon capture failed: {}", reason));
   }
 }
