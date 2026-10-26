@@ -70,6 +70,14 @@ public final class RenderBench {
       backend.close();
       return;
     }
+    if (filter.equals("frame")) {
+      FrameBench.run(backend, pipelines, args);
+      pipelines.close();
+      atlas.close();
+      light.close();
+      backend.close();
+      return;
+    }
     int totalVertices = args.length > 1 ? Integer.parseInt(args[1]) : 2_000_000;
     String[] names = {
       "350 draws",
@@ -318,7 +326,12 @@ public final class RenderBench {
     System.out.printf(
         "transient exhaustion: accepted=%d (%.1f MiB vertices) insufficientBefore=%b"
             + " insufficientAfterBig=%b insufficientAfterSmall=%b recoveredNextFrame=%b%n",
-        accepted, accepted * 4000 * 32 / 1048576.0, beforeBig, afterBig, afterSmall, recovered);
+        accepted,
+        accepted * 4000.0 * net.dx12mc.graphics.bgfx.Packing.VERTEX_STRIDE / 1048576.0,
+        beforeBig,
+        afterBig,
+        afterSmall,
+        recovered);
   }
 
   private static long triangles(
