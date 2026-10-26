@@ -27,6 +27,10 @@ public final class Backend implements AutoCloseable {
   private String rendererName = "uninitialized";
   private Adapter adapter;
   private long frameNumber;
+  private int clearColorRgba;
+  private int viewClearFlags;
+  private int viewClearRgba;
+  private float viewClearDepth;
 
   public void initialize(
       long nativeWindow, FrameSize initialSize, int clearColorRgba, boolean debugText) {
@@ -56,7 +60,7 @@ public final class Backend implements AutoCloseable {
     }
     bgfx_set_view_name(MAIN_VIEW, "DX12MC Main");
     bgfx_set_view_mode(MAIN_VIEW, BGFX_VIEW_MODE_SEQUENTIAL);
-    bgfx_set_view_clear(MAIN_VIEW, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, clearColorRgba, 1.0f, 0);
+    this.clearColorRgba = clearColorRgba;
     bgfx_set_debug(debugText ? BGFX_DEBUG_TEXT : BGFX_DEBUG_NONE);
     adapter = queryAdapter();
     DX12MC.LOGGER.info(
@@ -81,9 +85,30 @@ public final class Backend implements AutoCloseable {
     if (swapChain.takeResetPending()) {
       bgfx_reset(size.width(), size.height(), swapChain.resetFlags(), BGFX_TEXTURE_FORMAT_COUNT);
     }
-    bgfx_set_view_rect(
-        MAIN_VIEW, 0, 0, Math.min(size.width(), 0xFFFF), Math.min(size.height(), 0xFFFF));
-    bgfx_touch(MAIN_VIEW);
+    ViewSequence.reset();
+    viewClearFlags = BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH;
+    viewClearRgba = clearColorRgba;
+    viewClearDepth = 1.0f;
+    prepareView(MAIN_VIEW);
+  }
+
+  public void clear(int glMask, int rgba, float depth) {
+    ensureInitialized();
+    int flags = ViewSequence.clearFlags(glMask);
+    if (flags == BGFX_CLEAR_NONE) return;
+    if (ViewSequence.advanceIfUsed()) viewClearFlags = BGFX_CLEAR_NONE;
+    viewClearFlags |= flags;
+    if ((flags & BGFX_CLEAR_COLOR) != 0) viewClearRgba = rgba;
+    if ((flags & BGFX_CLEAR_DEPTH) != 0) viewClearDepth = depth;
+    prepareView(ViewSequence.current());
+  }
+
+  private void prepareView(int view) {
+    FrameSize size = swapChain.size();
+    bgfx_set_view_mode(view, BGFX_VIEW_MODE_SEQUENTIAL);
+    bgfx_set_view_rect(view, 0, 0, Math.min(size.width(), 0xFFFF), Math.min(size.height(), 0xFFFF));
+    bgfx_set_view_clear(view, viewClearFlags, viewClearRgba, viewClearDepth, 0);
+    bgfx_touch(view);
   }
 
   public long endFrame() {
