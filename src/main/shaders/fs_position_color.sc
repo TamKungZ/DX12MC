@@ -1,8 +1,10 @@
-$input v_color0
+$input v_color0, v_fog
 #include "common.sh"
 
 uniform vec4 u_color;
+uniform vec4 u_fogParams;
+uniform vec4 u_fogColor;
 void main()
 {
-    gl_FragColor = v_color0 * u_color;
+    gl_FragColor = dx12mcApplyFog(v_color0 * u_color, v_fog, u_fogParams, u_fogColor);
 }
