@@ -52,6 +52,7 @@ The bridge is responsible for converting Minecraft render inputs into data the b
 - `DrawContextFactory` resolves per-draw matrices, shader semantics, textures, and state without allocating on the steady-state path.
 - `graphics.pipeline.PipelineSet` owns pipeline resources and routes draws to the colour, texture, lightmapped or entity pipeline, each with an alpha-test variant. Opaque programs never discard, so they keep early depth testing.
 - Minecraft's mid-frame clears start a new sequential bgfx view on the backbuffer with the requested clear flags.
+- Screenshots replace Minecraft's OpenGL readback with a bgfx screenshot of the last presented frame, then let Minecraft's own code save it.
 - `Bridge` is the native-rendering facade and coordinates draw submission across these components.
 
 The Minecraft-facing `Controller` remains the stable integration API. `RendererLifecycle` owns backend initialization, frame and present boundaries, fatal state, and shutdown; `SectionRenderContext` owns the reusable transforms for compiled section layers.
@@ -90,8 +91,7 @@ Examples of intentionally limited behavior:
 
 - legacy menu blur is omitted until native render-target or post-processing support exists, and the Fabulous graphics mode is not offered for the same reason;
 - OpenGL post chains (spectator effects, glowing-entity outlines) are skipped, and draws issued while an offscreen render target is bound are not drawn to the screen;
-- automatic singleplayer world-icon capture is omitted until native readback exists;
-- unsupported thick-line rendering is skipped at the mesh choke point.
+- screenshots of offscreen render targets (panorama capture) are not supported.
 
 These limitations are tracked in source and tests so missing coverage is visible during development.
 
