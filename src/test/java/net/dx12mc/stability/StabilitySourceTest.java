@@ -185,8 +185,7 @@ class StabilitySourceTest {
   void fixedRenderStateIsMirroredIntoBgfxInsteadOfUsingOneHardCodedState() throws IOException {
     String glState = read("mixin/GlStateManagerMixin.java");
     String bridge = read("bridge/Bridge.java") + read("bridge/DrawContextFactory.java");
-    String color = read("graphics/pipeline/ColorPipeline.java");
-    String texture = read("graphics/pipeline/TexturePipeline.java");
+    String pipeline = read("graphics/pipeline/ShaderPipeline.java");
     String scene = read("debug/Scene.java") + read("debug/NativeOverlayRenderer.java");
     assertTrue(glState.contains("_enableDepthTest()V"));
     assertTrue(glState.contains("_depthFunc(I)V"));
@@ -206,12 +205,10 @@ class StabilitySourceTest {
     assertTrue(glState.contains("dx12mc$suppressLegacyState(ci)"));
     assertTrue(glState.contains("suppressLegacyOpenGlDriverWork()"));
     assertTrue(bridge.contains("renderState.snapshot(width, height)"));
-    assertTrue(color.contains("bgfx_set_state(state.bgfxState(), 0)"));
-    assertTrue(texture.contains("bgfx_set_state(state.bgfxState(), 0)"));
-    assertTrue(color.contains("bgfx_set_scissor"));
-    assertTrue(texture.contains("bgfx_set_scissor"));
-    assertFalse(color.contains("State.DEFAULT"));
-    assertFalse(texture.contains("ColorPipeline.State.DEFAULT"));
+    assertTrue(pipeline.contains("bgfx_set_state(state.bgfxState(), 0)"));
+    assertTrue(pipeline.contains("bgfx_set_scissor"));
+    assertFalse(pipeline.contains("State.DEFAULT"));
+    assertFalse(bridge.contains("immediateCompatibilitySnapshot"));
     assertTrue(scene.contains("Raw OpenGL draw escapes detected"));
     assertTrue(scene.contains("Fully clipped draws skipped before GPU submit"));
     String state =
@@ -248,19 +245,24 @@ class StabilitySourceTest {
             + read("bridge/DrawContextFactory.java")
             + read("bridge/DrawContext.java")
             + read("bridge/mesh/MeshStore.java");
-    String pipeline = read("graphics/pipeline/LightmapTexturePipeline.java");
+    String pipeline = read("graphics/pipeline/ShaderPipeline.java");
     assertTrue(encoder.contains("VertexFormatElement.UV1"));
     assertTrue(encoder.contains("VertexFormatElement.UV2"));
     assertTrue(encoder.contains("VertexFormatElement.NORMAL"));
     assertTrue(batch.contains("boolean hasUv2"));
     assertTrue(batch.contains("boolean hasNormal"));
     assertTrue(layout.contains("BGFX_ATTRIB_TEXCOORD2"));
-    assertFalse(layout.contains("BGFX_ATTRIB_TEXCOORD1"));
-    assertFalse(layout.contains("BGFX_ATTRIB_NORMAL"));
+    assertTrue(layout.contains("if (entity)"));
+    assertTrue(layout.contains("BGFX_ATTRIB_TEXCOORD1"));
+    assertTrue(layout.contains("BGFX_ATTRIB_NORMAL"));
     assertTrue(packing.contains("VERTEX_STRIDE = 32"));
-    assertTrue(bridge.contains("ShaderFamily.classify"));
+    assertTrue(packing.contains("ENTITY_VERTEX_STRIDE = 44"));
+    assertFalse(encoder.contains("retainExtendedAttributes"));
+    assertTrue(bridge.contains("ShaderSemantics.of(shader)"));
     assertTrue(bridge.contains("RenderSystem.getShaderTexture(2)"));
+    assertTrue(bridge.contains("RenderSystem.getShaderTexture(1)"));
     assertTrue(pipeline.contains("bgfx_set_texture(2"));
+    assertTrue(pipeline.contains("bgfx_set_texture(1"));
   }
 
   @Test
@@ -287,7 +289,7 @@ class StabilitySourceTest {
     assertFalse(bridge.contains("return new DrawContext("));
     assertFalse(bridge.contains("residents.put(slot, new ResidentMesh(slot.mesh().bytes()"));
     assertTrue(state.contains("cachedStandard"));
-    assertTrue(state.contains("cachedImmediate"));
+    assertFalse(state.contains("cachedImmediate"));
     assertTrue(state.contains("cachedSky"));
     assertTrue(state.contains("snapshot.revision() == revision"));
     assertTrue(config.contains("System.getProperty(\"dx12mc.overlay\", \"false\")"));
@@ -343,10 +345,7 @@ class StabilitySourceTest {
     assertTrue(runtime.contains("suppressLegacySectionDriverCalls"));
     assertTrue(controller.contains("lifecycle.active() && section.active()"));
     String pipelines =
-        read("graphics/pipeline/PipelineSet.java")
-            + read("graphics/pipeline/ColorPipeline.java")
-            + read("graphics/pipeline/TexturePipeline.java")
-            + read("graphics/pipeline/LightmapTexturePipeline.java");
+        read("graphics/pipeline/PipelineSet.java") + read("graphics/pipeline/ShaderPipeline.java");
     assertTrue(pipelines.contains("SECTION_GEOMETRY_DISCARD"));
     assertTrue(pipelines.contains("BGFX_DISCARD_INDEX_BUFFER | BGFX_DISCARD_VERTEX_STREAMS"));
     assertTrue(pipelines.contains("if (!reuseState)"));
@@ -398,7 +397,7 @@ class StabilitySourceTest {
     String scene = read("debug/Scene.java") + read("debug/NativeOverlayRenderer.java");
     assertTrue(state.contains("if (blend)"));
     assertTrue(state.contains("blendBits(srcRgb, dstRgb, srcAlpha, dstAlpha)"));
-    assertTrue(state.contains("IMMEDIATE_COMPAT_ALPHA_BLEND"));
+    assertFalse(state.contains("IMMEDIATE_COMPAT_ALPHA_BLEND"));
     assertTrue(bridge.contains("isOmittableNativeLine"));
     assertTrue(bridge.contains("rendertype_lines"));
     assertTrue(bridge.contains("omittedNativeLineOverlay"));
