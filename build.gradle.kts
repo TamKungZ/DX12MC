@@ -258,7 +258,8 @@ val validateD3D12ShaderSources by tasks.registering {
             requireAll(name, listOf("uniform mat4 u_fogModel;", "dx12mcFogDistance(mul(u_fogModel, clip).xyz"))
         }
         for (name in listOf("vs_position_color_light.sc", "vs_position_color_tex_light.sc", "vs_entity.sc")) {
-            requireAll(name, listOf("SAMPLER2D(s_lightmap, 2)", "dx12mcLightmapUv(a_texcoord2, u_lightParams.x)"))
+            requireAll(name, listOf("SAMPLER2D(s_lightmap, 2)",
+                "dx12mcLightmapUv(dx12mcUnsigned16(a_texcoord2), u_lightParams.x)"))
         }
         requireAll("vs_line.sc", listOf(
             "uniform vec4 u_lineParams;",
@@ -394,6 +395,7 @@ dependencies {
 java {
     toolchain.languageVersion.set(JavaLanguageVersion.of(javaVersion))
     withSourcesJar()
+    withJavadocJar()
 }
 
 loom {
@@ -479,6 +481,10 @@ tasks.test {
     useJUnitPlatform()
 }
 
+tasks.javadoc {
+    (options as StandardJavadocDocletOptions).addStringOption("Xdoclint:all,-missing", "-quiet")
+}
+
 tasks.register<JavaExec>("cpuBench") {
     group = "verification"
     description = "Times the CPU-side mesh encoding, packing and region assembly paths."
@@ -517,6 +523,13 @@ tasks.remapJar {
 extra["signing.gnupg.keyName"] = signingKeyName ?: signingKeyCandidates.first()
 
 fun hasSigningKey(): Boolean = signingKeyName != null
+
+val requireSigning = providers.gradleProperty("dx12mc.requireSigning").map { it.toBoolean() }.orElse(false).get()
+if (requireSigning && signingKeyName == null &&
+    gradle.startParameter.taskNames.any { it.contains("publish", ignoreCase = true) }) {
+    throw GradleException(
+        "dx12mc.requireSigning is set but gpg has none of the signing keys: ${signingKeyCandidates.joinToString()}")
+}
 
 publishing {
     publications {
