@@ -78,6 +78,10 @@ public final class Bridge implements AutoCloseable {
     textures.bind(id);
   }
 
+  public void texParameter(int target, int pname, float value) {
+    textures.texParameter(target, pname, value);
+  }
+
   public void depthTest(boolean enabled) {
     contexts.state().depthTest(enabled);
   }
@@ -160,23 +164,9 @@ public final class Bridge implements AutoCloseable {
       int skipPixels,
       int skipRows,
       int width,
-      int height,
-      boolean blur,
-      boolean clamp,
-      boolean mipmap) {
+      int height) {
     boolean accepted =
-        textures.upload(
-            image,
-            level,
-            offsetX,
-            offsetY,
-            skipPixels,
-            skipRows,
-            width,
-            height,
-            blur,
-            clamp,
-            mipmap);
+        textures.upload(image, level, offsetX, offsetY, skipPixels, skipRows, width, height);
     stats.textureUpload(accepted);
     if (!accepted) {
       throw unsupported(
@@ -288,7 +278,10 @@ public final class Bridge implements AutoCloseable {
       int framebufferHeight,
       int originX,
       int originY,
-      int originZ) {
+      int originZ,
+      float offsetX,
+      float offsetY,
+      float offsetZ) {
     requireStarted();
     if (slot == null || slot.batch() == null) {
       throw unsupported("Section VertexBuffer draw has no captured D3D12 mesh");
@@ -296,7 +289,9 @@ public final class Bridge implements AutoCloseable {
     Batch batch = slot.batch();
     DrawContext context;
     try {
-      context = contexts.createSection(batch, clipTransform, framebufferWidth, framebufferHeight);
+      context =
+          contexts.createSection(
+              batch, clipTransform, framebufferWidth, framebufferHeight, offsetX, offsetY, offsetZ);
     } catch (StagingBackpressureException pressure) {
       stats.deferredSectionDraw();
       return true;
@@ -463,30 +458,22 @@ public final class Bridge implements AutoCloseable {
 
   private boolean submitTransient(Batch batch, DrawContext context) {
     boolean submitted =
-        sectionIntent
-            ? pipelines.submitSection(
-                batch, context, contexts.matrix(), contexts.textureMatrix(), contexts.tint())
-            : pipelines.submit(
-                batch, context, contexts.matrix(), contexts.textureMatrix(), contexts.tint());
-    if (!submitted && transientExhausted(batch)) {
+        sectionIntent ? pipelines.submitSection(batch, context) : pipelines.submit(batch, context);
+    if (!submitted && transientExhausted(batch, context)) {
       stats.transientPressureDraw();
       return true;
     }
     return submitted;
   }
 
-  private boolean transientExhausted(Batch batch) {
+  private boolean transientExhausted(Batch batch, DrawContext context) {
     return TransientPressure.insufficient(
-        pipelines.layout(), batch.vertexCount(), batch.indexCount(), Packing.index32(batch));
+        pipelines.layout(context), batch.vertexCount(), batch.indexCount(), Packing.index32(batch));
   }
 
   private boolean submitPersistent(Mesh mesh, DrawContext context) {
-    if (sectionIntent) {
-      return pipelines.submitSection(
-          mesh, context, contexts.matrix(), contexts.textureMatrix(), contexts.tint());
-    }
-    return pipelines.submit(
-        mesh, context, contexts.matrix(), contexts.textureMatrix(), contexts.tint());
+    if (sectionIntent) return pipelines.submitSection(mesh, context);
+    return pipelines.submit(mesh, context);
   }
 
   private void flushSectionRegions() {
