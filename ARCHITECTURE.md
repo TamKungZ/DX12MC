@@ -36,6 +36,8 @@ DX12MC hooks Minecraft at a small number of render and resource choke points:
 - `VertexBuffer` for persistent mesh uploads and draws.
 - `NativeImage`, `TextureUtil`, and texture-related calls for image upload data.
 - `GlStateManager`, `RenderSystem`, and `RenderTarget` where Minecraft still expects GL-shaped lifecycle or state calls.
+- `Window.updateVsync`, `Options`, and `OptionInstance` so video settings either drive the D3D12 backend or are shown as unavailable.
+- `GlUtil` and `TimerQuery` so renderer information and GPU timing describe the D3D12 adapter instead of the bootstrap OpenGL context.
 
 The project prefers semantic Minecraft hooks over raw OpenGL interception. Low-level GL hooks are kept narrow: they mirror state DX12MC needs or stop unsupported raw rendering from being hidden.
 
@@ -85,7 +87,7 @@ DX12MC does not try to make every Minecraft render path work by mixing native D3
 
 Examples of intentionally limited behavior:
 
-- legacy menu blur is omitted until native render-target or post-processing support exists;
+- legacy menu blur is omitted until native render-target or post-processing support exists, and the Fabulous graphics mode is not offered for the same reason;
 - automatic singleplayer world-icon capture is omitted until native readback exists;
 - unsupported thick-line rendering is skipped at the mesh choke point.
 
