@@ -12,6 +12,15 @@ vec4 dx12mcTexture2D(Dx12mcSampler2D _sampler, vec2 _coord)
 {
     return _sampler.m_texture.Sample(_sampler.m_sampler, _coord);
 }
+vec4 dx12mcTexture2DMaxLod(Dx12mcSampler2D _sampler, vec2 _coord, float _maxLod)
+{
+    float lod = _sampler.m_texture.CalculateLevelOfDetailUnclamped(_sampler.m_sampler, _coord);
+    return _sampler.m_texture.SampleLevel(_sampler.m_sampler, _coord, min(lod, _maxLod));
+}
+vec4 dx12mcTexture2DLevel(Dx12mcSampler2D _sampler, vec2 _coord, float _level)
+{
+    return _sampler.m_texture.SampleLevel(_sampler.m_sampler, _coord, _level);
+}
 
 #define SAMPLER2D(_name, _reg) \
     uniform SamplerState _name ## Sampler : DX12MC_REGISTER(s, _reg); \
