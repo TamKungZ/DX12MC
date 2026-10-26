@@ -10,7 +10,7 @@ plugins {
 
 fun prop(name: String): String = property(name) as String
 
-version = prop("mod_version")
+version = "${prop("mod_version")}+mc${prop("minecraft_version")}"
 group = prop("maven_group")
 base {
     archivesName.set(prop("archives_base_name"))
