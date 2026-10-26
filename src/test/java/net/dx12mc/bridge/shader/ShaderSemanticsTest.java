@@ -104,7 +104,8 @@ class ShaderSemanticsTest {
         vertex.contains("minecraft_mix_light("),
         vertex.contains("texelFetch(Sampler1, UV1, 0)") && fragment.contains("overlayColor"),
         fragment.contains(".rrrr"),
-        fragment.contains("GlintAlpha"));
+        fragment.contains("GlintAlpha"),
+        vertex.contains("uniform float LineWidth;"));
   }
 
   private static Map<String, String[]> vanillaPrograms() throws Exception {
