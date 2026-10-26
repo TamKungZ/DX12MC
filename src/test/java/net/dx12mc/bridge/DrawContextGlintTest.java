@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import net.dx12mc.bridge.shader.ShaderFamily;
+import net.dx12mc.bridge.shader.ShaderSemantics;
 import net.dx12mc.bridge.texture.Registry;
 import org.junit.jupiter.api.Test;
 
@@ -20,16 +20,16 @@ class DrawContextGlintTest {
           "rendertype_entity_glint_direct",
           "rendertype_armor_entity_glint"
         }) {
-      assertTrue(ShaderFamily.usesGlintAlpha(shader), shader);
+      assertTrue(ShaderSemantics.of(shader).glintAlpha(), shader);
     }
-    assertFalse(ShaderFamily.usesGlintAlpha("rendertype_entity_cutout"));
-    assertFalse(ShaderFamily.usesGlintAlpha(null));
+    assertFalse(ShaderSemantics.of("rendertype_entity_cutout").glintAlpha());
+    assertFalse(ShaderSemantics.of(null).glintAlpha());
   }
 
   @Test
   void glintAlphaScalesColorButNotAlphaLikeTheVanillaGlintShaders() {
     DrawContextFactory factory = new DrawContextFactory(new Registry(new Stats()));
-    float[] tint = factory.tint();
+    float[] tint = factory.context().tint();
     tint[0] = 1.0f;
     tint[1] = 0.5f;
     tint[2] = 0.25f;
