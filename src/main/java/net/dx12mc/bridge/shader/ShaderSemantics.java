@@ -12,7 +12,8 @@ public record ShaderSemantics(
     boolean diffuseLighting,
     boolean overlay,
     boolean intensity,
-    boolean glintAlpha) {
+    boolean glintAlpha,
+    boolean screenSpaceLines) {
 
   public enum AlphaTest {
     NONE(-1.0f),
@@ -66,6 +67,7 @@ public record ShaderSemantics(
           false,
           false,
           false,
+          false,
           false);
   private static final ShaderSemantics TERRAIN =
       new ShaderSemantics(
@@ -74,6 +76,7 @@ public record ShaderSemantics(
           FogMode.LINEAR,
           FogSpace.POSITION,
           Lightmap.FILTERED,
+          false,
           false,
           false,
           false,
@@ -89,6 +92,7 @@ public record ShaderSemantics(
           true,
           true,
           false,
+          false,
           false);
   private static final ShaderSemantics ENTITY_CUTOUT = ENTITY.withAlpha(AlphaTest.TENTH, true);
   private static final ShaderSemantics ENTITY_LIT_VERTEX_ALPHA =
@@ -103,7 +107,8 @@ public record ShaderSemantics(
           false,
           false,
           false,
-          true);
+          true,
+          false);
   private static final ShaderSemantics TEXT =
       new ShaderSemantics(
           AlphaTest.TENTH,
@@ -111,6 +116,7 @@ public record ShaderSemantics(
           FogMode.LINEAR,
           FogSpace.POSITION,
           Lightmap.FETCH,
+          false,
           false,
           false,
           false,
@@ -125,6 +131,7 @@ public record ShaderSemantics(
           false,
           false,
           false,
+          false,
           false);
   private static final ShaderSemantics PLAIN =
       new ShaderSemantics(
@@ -136,6 +143,7 @@ public record ShaderSemantics(
           false,
           false,
           false,
+          false,
           false);
   private static final ShaderSemantics FADE =
       new ShaderSemantics(
@@ -144,6 +152,7 @@ public record ShaderSemantics(
           FogMode.FADE,
           FogSpace.POSITION,
           Lightmap.NONE,
+          false,
           false,
           false,
           false,
@@ -197,7 +206,7 @@ public record ShaderSemantics(
           Map.entry("rendertype_item_entity_translucent_cull", ENTITY_LIT_VERTEX_ALPHA),
           Map.entry("rendertype_leash", PLAIN.withFog(FogMode.LINEAR).withLightmap(Lightmap.FETCH)),
           Map.entry("rendertype_lightning", FADE),
-          Map.entry("rendertype_lines", PLAIN.withFog(FogMode.LINEAR)),
+          Map.entry("rendertype_lines", PLAIN.withFog(FogMode.LINEAR).withScreenSpaceLines()),
           Map.entry("rendertype_outline", GUI_COLOR.withAlpha(AlphaTest.ZERO, true)),
           Map.entry("rendertype_solid", TERRAIN),
           Map.entry("rendertype_text", TEXT),
@@ -238,7 +247,8 @@ public record ShaderSemantics(
         diffuseLighting,
         overlay,
         intensity,
-        glintAlpha);
+        glintAlpha,
+        screenSpaceLines);
   }
 
   private ShaderSemantics withFog(FogMode mode) {
@@ -255,7 +265,8 @@ public record ShaderSemantics(
         diffuseLighting,
         overlay,
         intensity,
-        glintAlpha);
+        glintAlpha,
+        screenSpaceLines);
   }
 
   private ShaderSemantics withLightmap(Lightmap mode) {
@@ -268,7 +279,8 @@ public record ShaderSemantics(
         diffuseLighting,
         overlay,
         intensity,
-        glintAlpha);
+        glintAlpha,
+        screenSpaceLines);
   }
 
   private ShaderSemantics withOverlay(boolean enabled) {
@@ -281,7 +293,8 @@ public record ShaderSemantics(
         diffuseLighting,
         enabled,
         intensity,
-        glintAlpha);
+        glintAlpha,
+        screenSpaceLines);
   }
 
   private ShaderSemantics withIntensity() {
@@ -294,6 +307,21 @@ public record ShaderSemantics(
         diffuseLighting,
         overlay,
         true,
-        glintAlpha);
+        glintAlpha,
+        screenSpaceLines);
+  }
+
+  private ShaderSemantics withScreenSpaceLines() {
+    return new ShaderSemantics(
+        alphaTest,
+        alphaTestsTexture,
+        fogMode,
+        fogSpace,
+        lightmap,
+        diffuseLighting,
+        overlay,
+        intensity,
+        glintAlpha,
+        true);
   }
 }
