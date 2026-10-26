@@ -32,7 +32,7 @@ public final class RenderBench {
   public static void main(String[] args) {
     long hwnd = createWindow();
     Backend backend = new Backend();
-    backend.initialize(hwnd, new FrameSize(WIDTH, HEIGHT), false, 0x18202AFF, false);
+    backend.initialize(hwnd, new FrameSize(WIDTH, HEIGHT), 0x18202AFF, false);
     System.out.println("renderer=" + backend.rendererName());
     PipelineSet pipelines = new PipelineSet();
     pipelines.start();
