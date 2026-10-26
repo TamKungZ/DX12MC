@@ -16,6 +16,7 @@ Note: 0.8.8 is the first version intended to initialize git history. Earlier ver
 - Skip draws aimed at offscreen render targets and OpenGL post chains (glowing-entity outlines, spectator effects) instead of drawing them onto the screen. Menu Background Blur stays disabled.
 - Draw Minecraft's line geometry. Lines (block outline, F3 axes, hitboxes, fishing line) are expanded to screen-space quads the way `rendertype_lines` does, and debug lines (F3+G chunk borders) are drawn as line primitives. Previously block outlines and the F3 axes were omitted, and fishing lines and debug line strips ended the game.
 - F2 screenshots and singleplayer world icons are read back from the Direct3D 12 frame through bgfx and saved by Minecraft's own screenshot code, with the same file names and chat messages.
+- Draw the text selection highlight (`RenderType.guiTextHighlight`), which uses OpenGL's `OR_REVERSE` colour logic operation. bgfx has no logic-op state, so it is drawn as two blend passes that give `src | ~dst` for vanilla's highlight colour. Previously selecting text in an edit box (Ctrl+A or shift-select) or drawing the creative inventory search box with a selection ended the game. Other logic operations, which vanilla does not use, still stop with a precise error.
 
 ## 0.9.2 - Video settings, F3 and license change
 
