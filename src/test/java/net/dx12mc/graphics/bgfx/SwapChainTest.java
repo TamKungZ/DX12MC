@@ -28,6 +28,26 @@ class SwapChainTest {
   }
 
   @Test
+  void screenCaptureWaitsUntilTheResetSwapChainHasPresentedAFrame() {
+    SwapChain swapChain = new SwapChain();
+    swapChain.size(new FrameSize(1280, 720));
+    swapChain.takeResetPending();
+    assertFalse(swapChain.holdsPresentedFrame());
+    swapChain.presented();
+    assertTrue(swapChain.holdsPresentedFrame());
+    swapChain.vsync(true);
+    swapChain.takeResetPending();
+    assertFalse(swapChain.holdsPresentedFrame(), "VSync reset recreates the presented buffers");
+    swapChain.presented();
+    swapChain.size(new FrameSize(1920, 1080));
+    swapChain.takeResetPending();
+    assertFalse(swapChain.holdsPresentedFrame(), "resize and fullscreen recreate them too");
+    swapChain.takeResetPending();
+    swapChain.presented();
+    assertTrue(swapChain.holdsPresentedFrame());
+  }
+
+  @Test
   void reapplyingTheSameVsyncValueDoesNotResetTheSwapChain() {
     SwapChain swapChain = new SwapChain();
     swapChain.vsync(true);
