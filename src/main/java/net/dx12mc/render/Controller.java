@@ -11,6 +11,7 @@ import net.dx12mc.bridge.Slot;
 import net.dx12mc.bridge.Stats;
 import net.dx12mc.config.Config;
 import net.dx12mc.graphics.RendererInfo;
+import net.dx12mc.graphics.bgfx.ViewSequence;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderType;
 import org.joml.Matrix4f;
@@ -23,12 +24,16 @@ public final class Controller implements AutoCloseable {
   private final SectionRenderContext section = new SectionRenderContext();
   private String semanticIntent = "frame";
   private int legacyVertexBufferUploadDepth;
+  private int clearRgba;
+  private float clearDepth = 1.0f;
+  private boolean offscreenTargetBound;
   private static final int GL_ARRAY_BUFFER = 0x8892;
 
   public Controller(Config config) {
     this.config = config;
     this.bridge = config.nativeMode() ? new Bridge(stats) : null;
     this.lifecycle = new RendererLifecycle(config, bridge, stats);
+    this.clearRgba = config.clearColorRgba();
   }
 
   public void initialize() {
@@ -74,6 +79,43 @@ public final class Controller implements AutoCloseable {
     if (target != GL_ARRAY_BUFFER) return false;
     stats.suppressedLegacyVertexStorage(bytes);
     return true;
+  }
+
+  public void texParameter(int target, int pname, float value) {
+    if (bridge != null) bridge.texParameter(target, pname, value);
+  }
+
+  public void clearColor(float red, float green, float blue, float alpha) {
+    clearRgba = ViewSequence.rgba(red, green, blue, alpha);
+  }
+
+  public void clearDepth(double depth) {
+    clearDepth = (float) depth;
+  }
+
+  public boolean clear(int mask) {
+    if (!config.nativeMode() || !lifecycle.active()) return false;
+    throwIfFailed();
+    if (offscreenTargetBound) return true;
+    try {
+      lifecycle.clear(Minecraft.getInstance(), mask, clearRgba, clearDepth);
+      return true;
+    } catch (FatalRenderException fatal) {
+      throw fatal;
+    } catch (Throwable throwable) {
+      throw fatal(
+          "Native D3D12 clear failed: mask=0x" + Integer.toHexString(mask) + ".", throwable);
+    }
+  }
+
+  public void bindRenderTarget(boolean mainTarget) {
+    offscreenTargetBound = !mainTarget;
+  }
+
+  public boolean suppressPostChain() {
+    if (config.legacyPostProcessingAvailable()) return false;
+    throwIfFailed();
+    return lifecycle.active();
   }
 
   public void bindTexture(int id) {
@@ -186,16 +228,12 @@ public final class Controller implements AutoCloseable {
       int skipPixels,
       int skipRows,
       int width,
-      int height,
-      boolean blur,
-      boolean clamp,
-      boolean mipmap) {
+      int height) {
     if (!config.nativeMode()) return;
     throwIfFailed();
     if (lifecycle.closed()) return;
     try {
-      bridge.uploadTexture(
-          image, level, offsetX, offsetY, skipPixels, skipRows, width, height, blur, clamp, mipmap);
+      bridge.uploadTexture(image, level, offsetX, offsetY, skipPixels, skipRows, width, height);
       stats.textureCpuBytes(bridge.textureCpuBytes());
     } catch (Throwable throwable) {
       throw fatal("Unable to mirror a Minecraft texture upload for D3D12.", throwable);
@@ -216,6 +254,7 @@ public final class Controller implements AutoCloseable {
   public boolean draw(Slot slot, Matrix4f modelView, Matrix4f projection) {
     if (!config.nativeMode()) return false;
     throwIfFailed();
+    if (offscreenTargetBound && lifecycle.active()) return true;
     lifecycle.ensureInitialized(Minecraft.getInstance());
     lifecycle.requireActive("VertexBuffer draw");
     try {
@@ -299,7 +338,10 @@ public final class Controller implements AutoCloseable {
           section.framebufferHeight(),
           section.originX(),
           section.originY(),
-          section.originZ())) {
+          section.originZ(),
+          section.offsetX(),
+          section.offsetY(),
+          section.offsetZ())) {
         throw new IllegalStateException("D3D12 bridge returned no section submission");
       }
       stats.cancelledVanillaDraw();
@@ -334,6 +376,7 @@ public final class Controller implements AutoCloseable {
   public boolean drawImmediate(MeshData mesh) {
     if (!config.nativeMode()) return false;
     throwIfFailed();
+    if (offscreenTargetBound && lifecycle.active()) return true;
     lifecycle.ensureInitialized(Minecraft.getInstance());
     lifecycle.requireActive("immediate MeshData draw");
     try {
