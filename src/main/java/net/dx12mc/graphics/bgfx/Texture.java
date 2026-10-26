@@ -6,65 +6,53 @@ import org.lwjgl.bgfx.BGFXMemory;
 
 public final class Texture implements AutoCloseable {
   private short handle;
-  private int samplerFlags;
+  private int samplerFlags = BGFX_SAMPLER_NONE;
+  private float maxLod;
   private final int width;
   private final int height;
   private final int maxLevel;
 
-  private Texture(short handle, int width, int height, int maxLevel, int samplerFlags) {
+  private Texture(short handle, int width, int height, int maxLevel) {
     this.handle = handle;
     this.width = width;
     this.height = height;
     this.maxLevel = maxLevel;
-    this.samplerFlags = samplerFlags;
   }
 
-  public static Texture create(
-      int width, int height, int maxLevel, boolean blur, boolean clamp, boolean mipmap) {
+  public static Texture create(int width, int height, int maxLevel) {
     if (width <= 0 || height <= 0 || width > 0xFFFF || height > 0xFFFF) {
       throw new IllegalArgumentException("invalid bgfx texture size " + width + "x" + height);
     }
     int safeMaxLevel = Math.max(0, maxLevel);
-    int sampler = samplerFlags(blur, clamp, mipmap);
     short handle =
         bgfx_create_texture_2d(
-            width, height, safeMaxLevel > 0, 1, BGFX_TEXTURE_FORMAT_RGBA8, sampler, null);
+            width, height, safeMaxLevel > 0, 1, BGFX_TEXTURE_FORMAT_RGBA8, BGFX_SAMPLER_NONE, null);
     if (!BGFX_HANDLE_IS_VALID(handle)) {
       throw new IllegalStateException(
           "bgfx rejected mutable RGBA8 texture " + width + "x" + height + " mips=" + safeMaxLevel);
     }
-    return new Texture(handle, width, height, safeMaxLevel, sampler);
+    return new Texture(handle, width, height, safeMaxLevel);
+  }
+
+  public void sampler(int flags, float maxLod) {
+    this.samplerFlags = flags;
+    this.maxLod = Math.max(0.0f, Math.min(maxLevel, maxLod));
+  }
+
+  public float maxLod() {
+    return maxLod;
+  }
+
+  public void update(int level, int x, int y, int width, int height, byte[] rgba) {
+    update(level, x, y, width, height, rgba, 0);
   }
 
   public void update(
-      int level,
-      int x,
-      int y,
-      int width,
-      int height,
-      byte[] rgba,
-      boolean blur,
-      boolean clamp,
-      boolean mipmap) {
-    update(level, x, y, width, height, rgba, 0, blur, clamp, mipmap);
-  }
-
-  public void update(
-      int level,
-      int x,
-      int y,
-      int width,
-      int height,
-      byte[] rgba,
-      int sourceOffset,
-      boolean blur,
-      boolean clamp,
-      boolean mipmap) {
+      int level, int x, int y, int width, int height, byte[] rgba, int sourceOffset) {
     if (!valid()) throw new IllegalStateException("texture is closed");
     if (level < 0 || level > maxLevel)
       throw new IllegalArgumentException("invalid mip level " + level + " > " + maxLevel);
     int bytes = validateRegion(level, x, y, width, height, rgba, sourceOffset);
-    samplerFlags = samplerFlags(blur, clamp, mipmap);
     BGFXMemory memory =
         StagingMemory.allocate(bytes, target -> target.put(rgba, sourceOffset, bytes));
     bgfx_update_texture_2d(handle, 0, level, x, y, width, height, memory, 0xFFFF);
@@ -136,13 +124,5 @@ public final class Texture implements AutoCloseable {
         + height
         + ", bytes="
         + bytes;
-  }
-
-  private static int samplerFlags(boolean blur, boolean clamp, boolean mipmap) {
-    int flags = BGFX_SAMPLER_NONE;
-    if (clamp) flags |= BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP;
-    if (!blur) flags |= BGFX_SAMPLER_MIN_POINT | BGFX_SAMPLER_MAG_POINT;
-    if (mipmap && !blur) flags |= BGFX_SAMPLER_MIP_POINT;
-    return flags;
   }
 }
