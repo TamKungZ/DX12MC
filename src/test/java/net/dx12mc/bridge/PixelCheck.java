@@ -2,6 +2,7 @@ package net.dx12mc.bridge;
 
 import static org.lwjgl.bgfx.BGFX.*;
 
+import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -11,9 +12,11 @@ import net.dx12mc.bridge.shader.ShaderSemantics;
 import net.dx12mc.bridge.state.RenderState;
 import net.dx12mc.graphics.FrameSize;
 import net.dx12mc.graphics.bgfx.Backend;
+import net.dx12mc.graphics.bgfx.ScreenCapture;
 import net.dx12mc.graphics.bgfx.Texture;
 import net.dx12mc.graphics.bgfx.ViewSequence;
 import net.dx12mc.graphics.pipeline.PipelineSet;
+import net.dx12mc.render.ScreenImages;
 import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryUtil;
 
@@ -47,6 +50,10 @@ final class PixelCheck {
       check.terrainLightmapIsFilteredAndEntityLightmapIsFetched();
       check.entityDiffuseLight();
       check.minifiedTerrainClampsToTheLastUploadedMipLevel();
+      check.screenSpaceLineCoversItsWidth();
+      check.debugLinePrimitiveIsRasterised();
+      check.screenCaptureReturnsThePresentedBackbuffer();
+      check.measureFullHdScreenCapture();
       return check.failures;
     } finally {
       check.close();
@@ -188,6 +195,168 @@ final class PixelCheck {
       texels[i + 3] = -1;
     }
     return texels;
+  }
+
+  private void screenSpaceLineCoversItsWidth() {
+    begin(0x000000FF);
+    DrawContext line = colorContext();
+    line.set(DrawContext.Kind.LINE, null, null, null, false, line.state());
+    DrawContextFactory.lineParameters(4.0f, SIZE, SIZE, line.lineParams());
+    float[] positions = {-1, 0, 0.5f, -1, 0, 0.5f, 1, 0, 0.5f, 1, 0, 0.5f};
+    byte[] direction = {127, 0, 0, 127, 0, 0, 127, 0, 0, 127, 0, 0};
+    int[] colors = {0x00FF00FF, 0x00FF00FF, 0x00FF00FF, 0x00FF00FF};
+    Batch batch =
+        new Batch(
+            positions,
+            colors,
+            new float[0],
+            false,
+            new short[0],
+            false,
+            new short[0],
+            false,
+            direction,
+            true,
+            new int[] {0, 1, 2, 3, 2, 1},
+            4,
+            VertexFormat.Mode.LINES);
+    draw(batch, line);
+    readFrame();
+    expect("a 4 px rendertype_lines segment covers the row it crosses", 0, 255, 0, pixel(10, 31));
+    expect("the same segment covers the row below its centre", 0, 255, 0, pixel(10, 32));
+    expect("pixels outside the line width stay untouched", 0, 0, 0, pixel(10, 26));
+  }
+
+  private void debugLinePrimitiveIsRasterised() {
+    begin(0x000000FF);
+    DrawContext debug = colorContext();
+    debug.primitive = DrawContextFactory.primitive(VertexFormat.Mode.DEBUG_LINES);
+    float y = 1.0f - 2.0f * 40.5f / SIZE;
+    Batch batch =
+        new Batch(
+            new float[] {-1, y, 0.5f, 1, y, 0.5f},
+            new int[] {0xFFFF00FF, 0xFFFF00FF},
+            new float[0],
+            false,
+            new short[0],
+            false,
+            new short[0],
+            false,
+            new byte[0],
+            false,
+            new int[] {0, 1},
+            2,
+            VertexFormat.Mode.DEBUG_LINES);
+    draw(batch, debug);
+    debug.primitive = 0L;
+    readFrame();
+    expect("DEBUG_LINES draws a line primitive on its row", 255, 255, 0, pixel(20, 40));
+    expect("and nothing beside it", 0, 0, 0, pixel(20, 44));
+  }
+
+  private void screenCaptureReturnsThePresentedBackbuffer() {
+    backend.beginFrame(new FrameSize(SIZE + 16, SIZE + 16));
+    backend.endFrame();
+    backbufferFrame(0x336699FF, 0xFF0000FF);
+    boolean refused = !backend.requestScreenCapture();
+    backend.endFrame();
+    expect(
+        "no capture is requested before the reset swap chain has presented a frame",
+        1,
+        1,
+        1,
+        new int[] {refused ? 1 : 0, refused ? 1 : 0, refused ? 1 : 0});
+    backbufferFrame(0x000000FF, 0x0000FFFF);
+    boolean requested = backend.requestScreenCapture();
+    backend.endFrame();
+    ScreenCapture.Frame frame = backend.takeScreenCapture();
+    for (int wait = 0; requested && wait < 10 && frame == null; wait++) {
+      bgfx_frame(false);
+      frame = backend.takeScreenCapture();
+    }
+    if (frame == null) {
+      failures++;
+      System.out.println("pixel FAIL screen capture callback never delivered a frame");
+      return;
+    }
+    try (NativeImage image = ScreenImages.toNativeImage(frame)) {
+      int[] size = {image.getWidth(), image.getHeight(), 0};
+      expect("screenshot size matches the backbuffer", SIZE, SIZE, 0, size);
+      expect(
+          "capture holds the last presented frame, like vanilla's grab after present",
+          255,
+          0,
+          0,
+          abgr(image.getPixelRGBA(4, 4)));
+      expect(
+          "clear colour keeps its channel order",
+          0x33,
+          0x66,
+          0x99,
+          abgr(image.getPixelRGBA(60, 60)));
+      int alpha = image.getPixelRGBA(60, 60) >>> 24;
+      expect(
+          "screenshot alpha is opaque like downloadTexture(0, true)",
+          255,
+          255,
+          255,
+          new int[] {alpha, alpha, alpha});
+    } finally {
+      ScreenCapture.free(frame);
+    }
+  }
+
+  private void measureFullHdScreenCapture() {
+    FrameSize size = new FrameSize(1920, 1009);
+    for (int frame = 0; frame < 3; frame++) {
+      backend.beginFrame(size);
+      for (int view = 0; view < VIEWS; view++)
+        bgfx_set_view_frame_buffer(view, BGFX_INVALID_HANDLE);
+      backend.endFrame();
+    }
+    backend.beginFrame(size);
+    long requested = System.nanoTime();
+    backend.requestScreenCapture();
+    backend.endFrame();
+    int frames = 1;
+    ScreenCapture.Frame frame = backend.takeScreenCapture();
+    while (frame == null && frames < 10) {
+      bgfx_frame(false);
+      frames++;
+      frame = backend.takeScreenCapture();
+    }
+    long delivered = System.nanoTime();
+    if (frame == null) {
+      failures++;
+      System.out.println("pixel FAIL 1920x1009 capture was not delivered");
+      return;
+    }
+    try (NativeImage image = ScreenImages.toNativeImage(frame)) {
+      long converted = System.nanoTime();
+      System.out.printf(
+          "capture 1920x1009: delivered after %d frame(s) in %.2f ms, conversion %.2f ms%n",
+          frames, (delivered - requested) / 1e6, (converted - delivered) / 1e6);
+    } finally {
+      ScreenCapture.free(frame);
+    }
+  }
+
+  private void backbufferFrame(int clearRgba, int quadRgba) {
+    backend.beginFrame(new FrameSize(SIZE, SIZE));
+    for (int view = 0; view < VIEWS; view++) bgfx_set_view_frame_buffer(view, BGFX_INVALID_HANDLE);
+    backend.clear(
+        ViewSequence.GL_COLOR_BUFFER_BIT | ViewSequence.GL_DEPTH_BUFFER_BIT, clearRgba, 1.0f);
+    state.blend(false);
+    draw(quad(-1.0f, 0.0f, 0.5f, quadRgba), topLeft(colorContext()));
+  }
+
+  private static DrawContext topLeft(DrawContext context) {
+    new Matrix4f().translation(0.0f, 1.0f, 0.0f).get(context.matrix());
+    return context;
+  }
+
+  private static int[] abgr(int pixel) {
+    return new int[] {pixel & 0xFF, pixel >>> 8 & 0xFF, pixel >>> 16 & 0xFF};
   }
 
   private void create() {
