@@ -11,6 +11,7 @@ import net.dx12mc.graphics.RendererInfo;
 import net.dx12mc.graphics.bgfx.Backend;
 import net.dx12mc.graphics.bgfx.Probe;
 import net.dx12mc.graphics.bgfx.ProbeResult;
+import net.dx12mc.graphics.bgfx.ScreenCapture;
 import net.dx12mc.mixin.RenderSystemAccessor;
 import net.dx12mc.platform.win32.WindowHandle;
 import net.minecraft.client.Minecraft;
@@ -156,6 +157,15 @@ final class RendererLifecycle implements AutoCloseable {
   void clear(Minecraft minecraft, int mask, int rgba, float depth) {
     ensureFrame(minecraft);
     backend.clear(mask, rgba, depth);
+  }
+
+  boolean requestScreenCapture(Minecraft minecraft) {
+    ensureFrame(minecraft);
+    return backend.requestScreenCapture();
+  }
+
+  ScreenCapture.Frame takeScreenCapture() {
+    return state == State.ACTIVE ? backend.takeScreenCapture() : null;
   }
 
   void vsync(boolean enabled) {
