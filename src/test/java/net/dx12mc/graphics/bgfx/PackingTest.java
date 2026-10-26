@@ -67,6 +67,35 @@ class PackingTest {
   }
 
   @Test
+  void entityVerticesCarryOverlayLightAndNormalForVanillaEntityLighting() {
+    Batch batch =
+        new Batch(
+            new float[] {1.0f, 2.0f, 3.0f},
+            new int[] {0x11223344},
+            new float[] {0.25f, 0.75f},
+            true,
+            new short[] {7, 10},
+            true,
+            new short[] {240, 128},
+            true,
+            new byte[] {0, 127, -127},
+            true,
+            new int[] {0, 0, 0},
+            1,
+            VertexFormat.Mode.TRIANGLES);
+    ByteBuffer out =
+        ByteBuffer.allocate(Packing.ENTITY_VERTEX_STRIDE).order(ByteOrder.nativeOrder());
+    Packing.entityVertices(out, batch);
+    assertEquals(7.0f, out.getFloat(24));
+    assertEquals(10.0f, out.getFloat(28));
+    assertEquals(240.0f, out.getFloat(32));
+    assertEquals(128.0f, out.getFloat(36));
+    assertEquals(0.0f, (Byte.toUnsignedInt(out.get(40)) - 128) / 127.0f);
+    assertEquals(1.0f, (Byte.toUnsignedInt(out.get(41)) - 128) / 127.0f);
+    assertEquals(-1.0f, (Byte.toUnsignedInt(out.get(42)) - 128) / 127.0f);
+  }
+
+  @Test
   void selectsThirtyTwoBitIndicesOnlyWhenNeeded() {
     assertFalse(Packing.index32(new int[] {0, 1, 65535}));
     assertTrue(Packing.index32(new int[] {0, 65536}));
