@@ -26,6 +26,7 @@ public final class Backend implements AutoCloseable {
   private boolean initialized;
   private String rendererName = "uninitialized";
   private Adapter adapter;
+  private ScreenCapture screenCapture;
   private long frameNumber;
   private int clearColorRgba;
   private int viewClearFlags;
@@ -40,13 +41,17 @@ public final class Backend implements AutoCloseable {
     swapChain.size(initialSize);
     swapChain.takeResetPending();
     FrameSize size = swapChain.size();
+    screenCapture = new ScreenCapture();
     try (BGFXInit init = BGFXInit.calloc()) {
       bgfx_init_ctor(init);
+      init.callback(screenCapture.callbackInterface());
       init.type(BGFX_RENDERER_TYPE_DIRECT3D12);
       init.platformData().nwh(nativeWindow);
       init.resolution().width(size.width()).height(size.height()).reset(swapChain.resetFlags());
       init.limits().transientVbSize(TRANSIENT_VERTEX_BYTES).transientIbSize(TRANSIENT_INDEX_BYTES);
       if (!bgfx_init(init)) {
+        screenCapture.close();
+        screenCapture = null;
         throw new IllegalStateException("bgfx_init returned false for Direct3D 12");
       }
     }
@@ -114,6 +119,7 @@ public final class Backend implements AutoCloseable {
   public long endFrame() {
     ensureInitialized();
     bgfx_frame(false);
+    swapChain.presented();
     return ++frameNumber;
   }
 
@@ -124,6 +130,17 @@ public final class Backend implements AutoCloseable {
 
   public String rendererName() {
     return rendererName;
+  }
+
+  public boolean requestScreenCapture() {
+    ensureInitialized();
+    if (!swapChain.holdsPresentedFrame()) return false;
+    screenCapture.request();
+    return true;
+  }
+
+  public ScreenCapture.Frame takeScreenCapture() {
+    return screenCapture == null ? null : screenCapture.take();
   }
 
   public Adapter adapter() {
@@ -166,6 +183,8 @@ public final class Backend implements AutoCloseable {
     }
     initialized = false;
     bgfx_shutdown();
+    screenCapture.close();
+    screenCapture = null;
     rendererName = "uninitialized";
     adapter = null;
     DX12MC.LOGGER.info("bgfx shutdown complete");
