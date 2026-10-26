@@ -291,7 +291,7 @@ class StabilitySourceTest {
     assertTrue(state.contains("cachedSky"));
     assertTrue(state.contains("snapshot.revision() == revision"));
     assertTrue(config.contains("System.getProperty(\"dx12mc.overlay\", \"false\")"));
-    assertTrue(config.contains("System.getProperty(\"dx12mc.vsync\", \"false\")"));
+    assertFalse(config.contains("dx12mc.vsync"));
     assertTrue(scene.contains("dx12mc.overlay.refreshMillis"));
     assertTrue(scene.contains("Previous frame CPU/GPU"));
     assertTrue(scene.contains("GC total / since overlay refresh"));
