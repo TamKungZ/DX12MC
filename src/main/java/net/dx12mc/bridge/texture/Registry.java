@@ -10,6 +10,7 @@ public final class Registry implements AutoCloseable {
   private static final long MAX_TOTAL_CPU_BYTES =
       Long.getLong("dx12mc.texture.maxTotalBytes", 512L * 1024L * 1024L);
   private final Map<Integer, TextureEntry> entries = new HashMap<>();
+  private final Map<Integer, SamplerState> samplers = new HashMap<>();
   private static final int DELETED_HISTORY = 32;
   private final int[] deletedIds = new int[DELETED_HISTORY];
   private final long[] deletedFrames = new long[DELETED_HISTORY];
@@ -39,7 +40,8 @@ public final class Registry implements AutoCloseable {
     if (cachedResolvedId == id) clearResolvedCache();
     TextureEntry existing = entries.get(id);
     if (existing == null) {
-      entries.put(id, new TextureEntry(new Image(width, height, maxLevel), true, stats));
+      entries.put(
+          id, new TextureEntry(new Image(width, height, maxLevel), sampler(id), true, stats));
       return;
     }
     if (existing.image.matchesDimensions(width, height)) {
@@ -67,7 +69,7 @@ public final class Registry implements AutoCloseable {
     }
     existing.close();
     cpuBytes -= existing.image.allocatedCpuBytes();
-    entries.put(id, new TextureEntry(new Image(width, height, maxLevel), true, stats));
+    entries.put(id, new TextureEntry(new Image(width, height, maxLevel), sampler(id), true, stats));
   }
 
   public void allocateBoundLevel(int level, int width, int height) {
@@ -92,7 +94,8 @@ public final class Registry implements AutoCloseable {
                 + "x"
                 + height);
       }
-      entries.put(boundId, new TextureEntry(new Image(width, height, 0), true, stats));
+      entries.put(
+          boundId, new TextureEntry(new Image(width, height, 0), sampler(boundId), true, stats));
       return;
     }
     if (entry.image.ensureMaxLevel(level)) entry.close();
@@ -100,7 +103,8 @@ public final class Registry implements AutoCloseable {
       if (level == 0) {
         entry.close();
         cpuBytes -= entry.image.allocatedCpuBytes();
-        entries.put(boundId, new TextureEntry(new Image(width, height, 0), true, stats));
+        entries.put(
+            boundId, new TextureEntry(new Image(width, height, 0), sampler(boundId), true, stats));
         return;
       }
       throw new IllegalStateException(
@@ -127,10 +131,7 @@ public final class Registry implements AutoCloseable {
       int skipPixels,
       int skipRows,
       int width,
-      int height,
-      boolean blur,
-      boolean clamp,
-      boolean mipmap) {
+      int height) {
     if (boundId <= 0 || source == null) return false;
     if (level < 0 || offsetX < 0 || offsetY < 0 || width <= 0 || height <= 0) return false;
     if (skipPixels < 0
@@ -156,7 +157,9 @@ public final class Registry implements AutoCloseable {
       }
       int inferredWidth = checkedExtent(offsetX, width, "width");
       int inferredHeight = checkedExtent(offsetY, height, "height");
-      entry = new TextureEntry(new Image(inferredWidth, inferredHeight, 0), false, stats);
+      entry =
+          new TextureEntry(
+              new Image(inferredWidth, inferredHeight, 0), sampler(boundId), false, stats);
       entries.put(boundId, entry);
     } else {
       if (level > entry.image.maxLevel()) {
@@ -184,20 +187,19 @@ public final class Registry implements AutoCloseable {
     long before = entry.image.allocatedCpuBytes();
     try {
       return entry.image.upload(
-          source,
-          level,
-          offsetX,
-          offsetY,
-          skipPixels,
-          skipRows,
-          width,
-          height,
-          blur,
-          clamp,
-          mipmap);
+          source, level, offsetX, offsetY, skipPixels, skipRows, width, height);
     } finally {
       cpuBytes += entry.image.allocatedCpuBytes() - before;
     }
+  }
+
+  public void texParameter(int target, int pname, float value) {
+    if (target != SamplerState.GL_TEXTURE_2D || boundId <= 0) return;
+    sampler(boundId).parameter(pname, value);
+  }
+
+  SamplerState sampler(int id) {
+    return samplers.computeIfAbsent(id, ignored -> new SamplerState());
   }
 
   public Texture resolve(int id) {
@@ -229,6 +231,7 @@ public final class Registry implements AutoCloseable {
 
   public void delete(int id) {
     TextureEntry entry = entries.remove(id);
+    samplers.remove(id);
     deletedIds[deletedCursor] = id;
     deletedFrames[deletedCursor] = frameBoundary;
     deletedCursor = (deletedCursor + 1) % DELETED_HISTORY;
@@ -256,6 +259,7 @@ public final class Registry implements AutoCloseable {
   public void close() {
     for (TextureEntry entry : entries.values()) entry.close();
     entries.clear();
+    samplers.clear();
     boundId = 0;
     started = false;
     cpuBytes = 0;
