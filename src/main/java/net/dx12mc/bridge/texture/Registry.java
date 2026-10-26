@@ -43,8 +43,7 @@ public final class Registry implements AutoCloseable {
       return;
     }
     if (existing.image.matchesDimensions(width, height)) {
-      if (existing.image.ensureMaxLevel(maxLevel)) existing.close();
-      existing.authoritativeDimensions = true;
+      setAuthoritativeMaxLevel(existing, maxLevel);
       return;
     }
     if (!existing.authoritativeDimensions) {
@@ -63,8 +62,7 @@ public final class Registry implements AutoCloseable {
                 + height);
       }
       growInferred(existing, width, height, id, 0);
-      if (existing.image.ensureMaxLevel(maxLevel)) existing.close();
-      existing.authoritativeDimensions = true;
+      setAuthoritativeMaxLevel(existing, maxLevel);
       return;
     }
     existing.close();
@@ -268,6 +266,13 @@ public final class Registry implements AutoCloseable {
   private void clearResolvedCache() {
     cachedResolvedId = 0;
     cachedResolvedEntry = null;
+  }
+
+  private void setAuthoritativeMaxLevel(TextureEntry entry, int maxLevel) {
+    long before = entry.image.allocatedCpuBytes();
+    if (entry.image.setMaxLevel(maxLevel)) entry.close();
+    cpuBytes += entry.image.allocatedCpuBytes() - before;
+    entry.authoritativeDimensions = true;
   }
 
   private void growInferred(
