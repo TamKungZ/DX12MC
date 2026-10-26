@@ -86,6 +86,30 @@ public final class Runtime implements AutoCloseable {
     return controller.drawImmediate(mesh);
   }
 
+  public void texParameter(int target, int pname, float value) {
+    controller.texParameter(target, pname, value);
+  }
+
+  public void clearColor(float red, float green, float blue, float alpha) {
+    controller.clearColor(red, green, blue, alpha);
+  }
+
+  public void clearDepth(double depth) {
+    controller.clearDepth(depth);
+  }
+
+  public boolean clear(int mask) {
+    return controller.clear(mask);
+  }
+
+  public void bindRenderTarget(boolean mainTarget) {
+    controller.bindRenderTarget(mainTarget);
+  }
+
+  public boolean suppressPostChain() {
+    return controller.suppressPostChain();
+  }
+
   public void bindTexture(int id) {
     controller.bindTexture(id);
   }
@@ -170,12 +194,8 @@ public final class Runtime implements AutoCloseable {
       int skipPixels,
       int skipRows,
       int width,
-      int height,
-      boolean blur,
-      boolean clamp,
-      boolean mipmap) {
-    controller.uploadTexture(
-        image, level, offsetX, offsetY, skipPixels, skipRows, width, height, blur, clamp, mipmap);
+      int height) {
+    controller.uploadTexture(image, level, offsetX, offsetY, skipPixels, skipRows, width, height);
   }
 
   public void deleteTexture(int id) {
