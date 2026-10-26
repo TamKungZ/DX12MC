@@ -24,6 +24,8 @@ final class ShaderPipeline implements AutoCloseable {
   private final Uniforms uniforms;
   private final Program program;
   private final Program alphaTestProgram;
+  private final Program logicInvertProgram;
+  private final Program logicInvertAlphaTestProgram;
 
   ShaderPipeline(
       DrawContext.Kind kind,
@@ -31,19 +33,31 @@ final class ShaderPipeline implements AutoCloseable {
       Uniforms uniforms,
       String vertex,
       String fragment,
-      String alphaTestFragment) {
+      String alphaTestFragment,
+      boolean logicInvert) {
     this.kind = kind;
     this.layout = layout;
     this.uniforms = uniforms;
-    program = Program.load(SHADERS + vertex + ".bin", SHADERS + fragment + ".bin");
-    Program alpha;
+    Program[] loaded = new Program[4];
     try {
-      alpha = Program.load(SHADERS + vertex + ".bin", SHADERS + alphaTestFragment + ".bin");
+      loaded[0] = load(vertex, fragment);
+      loaded[1] = load(vertex, alphaTestFragment);
+      if (logicInvert) {
+        loaded[2] = load(vertex, "fs_logic_invert");
+        loaded[3] = load(vertex, "fs_logic_invert_alpha");
+      }
     } catch (Throwable throwable) {
-      program.close();
+      for (Program program : loaded) if (program != null) program.close();
       throw throwable;
     }
-    alphaTestProgram = alpha;
+    program = loaded[0];
+    alphaTestProgram = loaded[1];
+    logicInvertProgram = loaded[2];
+    logicInvertAlphaTestProgram = loaded[3];
+  }
+
+  private static Program load(String vertex, String fragment) {
+    return Program.load(SHADERS + vertex + ".bin", SHADERS + fragment + ".bin");
   }
 
   Layout layout() {
@@ -81,6 +95,8 @@ final class ShaderPipeline implements AutoCloseable {
 
   @Override
   public void close() {
+    if (logicInvertAlphaTestProgram != null) logicInvertAlphaTestProgram.close();
+    if (logicInvertProgram != null) logicInvertProgram.close();
     alphaTestProgram.close();
     program.close();
   }
@@ -113,9 +129,21 @@ final class ShaderPipeline implements AutoCloseable {
       }
       bgfx_set_state(state.bgfxState() | context.primitive(), 0);
     }
+    short handle = context.alphaTest() ? alphaTestProgram.handle() : program.handle();
+    if (state.logicInvertState() != 0L) {
+      Program invert = context.alphaTest() ? logicInvertAlphaTestProgram : logicInvertProgram;
+      if (invert == null) {
+        throw new IllegalStateException(
+            "OpenGL color logic operation has no D3D12 translation for " + kind + " draws");
+      }
+      bgfx_set_state(state.bgfxState() | context.primitive(), 0);
+      bgfx_submit(ViewSequence.current(), handle, 0, BGFX_DISCARD_NONE);
+      bgfx_set_state(state.logicInvertState() | context.primitive(), 0);
+      handle = invert.handle();
+    }
     bgfx_submit(
         ViewSequence.current(),
-        context.alphaTest() ? alphaTestProgram.handle() : program.handle(),
+        handle,
         0,
         preserveState ? SECTION_GEOMETRY_DISCARD : BGFX_DISCARD_ALL);
     ViewSequence.used();
