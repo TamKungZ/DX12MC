@@ -1,6 +1,10 @@
 package net.dx12mc.bridge;
 
+import static org.lwjgl.bgfx.BGFX.BGFX_STATE_PT_LINES;
+import static org.lwjgl.bgfx.BGFX.BGFX_STATE_PT_LINESTRIP;
+
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import java.util.Objects;
 import net.dx12mc.bridge.mesh.Batch;
 import net.dx12mc.bridge.shader.ShaderInputs;
@@ -13,6 +17,7 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 final class DrawContextFactory {
+  private static final float LINE_VIEW_SHRINK = 1.0f - 1.0f / 256.0f;
   private final Registry textures;
   private final RenderState renderState = new RenderState();
   private final Matrix4f mvpScratch = new Matrix4f();
@@ -36,14 +41,24 @@ final class DrawContextFactory {
       int framebufferWidth,
       int framebufferHeight,
       boolean immediate) {
-    mvpScratch.set(projection).mul(modelView);
-    clipScratch.identity().m22(0.5f).m32(0.5f).mul(mvpScratch).get(context.matrix);
     String shader = shaderName();
     classifyShader(shader);
+    mvpScratch.set(projection);
+    if (semantics.screenSpaceLines()) mvpScratch.scale(LINE_VIEW_SHRINK);
+    mvpScratch.mul(modelView);
+    clipScratch.identity().m22(0.5f).m32(0.5f).mul(mvpScratch).get(context.matrix);
     prepareSharedUniforms();
     fogSpaceFromClip(clipScratch, ShaderInputs.viewSpaceFog(semantics) ? modelView : null);
     RenderState.Snapshot state = snapshot(framebufferWidth, framebufferHeight);
     DrawContext prepared = prepareResources(batch, shader, immediate, state);
+    context.primitive = primitive(batch.sourceMode());
+    if (prepared.kind() == DrawContext.Kind.LINE) {
+      lineParameters(
+          RenderSystem.getShaderLineWidth(),
+          framebufferWidth,
+          framebufferHeight,
+          context.lineParams);
+    }
     applyDepthBias(state.depthBias());
     return prepared;
   }
@@ -64,6 +79,7 @@ final class DrawContextFactory {
     String shader = shaderName();
     classifyShader(shader);
     prepareSharedUniforms();
+    context.primitive = 0L;
     fogSpaceFromClip(clipTransform, null);
     fogScratch.mulLocal(clipScratch.translation(offsetX, offsetY, offsetZ)).get(context.fogModel);
     RenderState.Snapshot state = snapshot(framebufferWidth, framebufferHeight);
@@ -142,10 +158,31 @@ final class DrawContextFactory {
 
   private DrawContext.Kind kind(
       Batch batch, boolean textured, boolean lightmapped, boolean immediate) {
+    if (immediate && semantics.screenSpaceLines() && batch.hasNormal() && expandsLines(batch)) {
+      return DrawContext.Kind.LINE;
+    }
     if (!textured) return lightmapped ? DrawContext.Kind.COLOR_LIGHT : DrawContext.Kind.COLOR;
     if (immediate && batch.hasNormal() && (semantics.diffuseLighting() || semantics.overlay()))
       return DrawContext.Kind.ENTITY;
     return lightmapped ? DrawContext.Kind.TEXTURE_LIGHT : DrawContext.Kind.TEXTURE;
+  }
+
+  static boolean expandsLines(Batch batch) {
+    VertexFormat.Mode mode = batch.sourceMode();
+    return mode == VertexFormat.Mode.LINES || mode == VertexFormat.Mode.LINE_STRIP;
+  }
+
+  static long primitive(VertexFormat.Mode mode) {
+    if (mode == VertexFormat.Mode.DEBUG_LINES) return BGFX_STATE_PT_LINES;
+    if (mode == VertexFormat.Mode.DEBUG_LINE_STRIP) return BGFX_STATE_PT_LINESTRIP;
+    return 0L;
+  }
+
+  static void lineParameters(float lineWidth, int width, int height, float[] target) {
+    target[0] = lineWidth;
+    target[1] = width;
+    target[2] = height;
+    target[3] = 0.0f;
   }
 
   private void prepareLightDirections() {
