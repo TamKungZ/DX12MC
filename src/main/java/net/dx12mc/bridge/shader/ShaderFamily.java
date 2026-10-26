@@ -19,6 +19,10 @@ public enum ShaderFamily {
     return lightmapCandidate;
   }
 
+  public static boolean usesGlintAlpha(String shaderName) {
+    return shaderName != null && shaderName.toLowerCase(Locale.ROOT).contains("glint");
+  }
+
   public static ShaderFamily classify(String shaderName) {
     if (shaderName == null || shaderName.isBlank()) return BASIC;
     String n = shaderName.toLowerCase(Locale.ROOT);
