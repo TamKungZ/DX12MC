@@ -70,6 +70,7 @@ final class ShaderPipeline implements AutoCloseable {
           vertices, layout.value(), batch.vertexCount(), indices, batch.indexCount(), index32))
         return false;
       if (kind == DrawContext.Kind.ENTITY) Packing.entityVertices(vertices.data(), batch);
+      else if (kind == DrawContext.Kind.LINE) Packing.lineVertices(vertices.data(), batch);
       else Packing.vertices(vertices.data(), batch);
       Packing.indices(indices.data(), batch.indices(), batch.indexCount(), index32);
       bgfx_set_transient_vertex_buffer(0, vertices, 0, batch.vertexCount());
@@ -110,7 +111,7 @@ final class ShaderPipeline implements AutoCloseable {
         bgfx_set_scissor(
             state.scissorX(), state.scissorY(), state.scissorWidth(), state.scissorHeight());
       }
-      bgfx_set_state(state.bgfxState(), 0);
+      bgfx_set_state(state.bgfxState() | context.primitive(), 0);
     }
     bgfx_submit(
         ViewSequence.current(),
