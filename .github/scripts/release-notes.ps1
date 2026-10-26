@@ -6,8 +6,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-if ($Tag -notmatch '^v?(\d+\.\d+\.\d+)$') {
-    throw "Tag '$Tag' is not a release tag. Expected X.Y.Z or vX.Y.Z."
+if ($Tag -notmatch '^v?(\d+\.\d+\.\d+)(\+mc\d+\.\d+(\.\d+)?)?$') {
+    throw "Tag '$Tag' is not a release tag. Expected X.Y.Z+mcA.B.C or vX.Y.Z+mcA.B.C."
 }
 $version = $Matches[1]
 

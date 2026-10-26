@@ -3,12 +3,12 @@ name: Publish
 on:
   push:
     tags:
-      - '[0-9]+.[0-9]+.[0-9]+'
-      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]*.[0-9]*.[0-9]*[+]mc*'
+      - 'v[0-9]*.[0-9]*.[0-9]*[+]mc*'
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag to publish again (X.Y.Z or vX.Y.Z)
+        description: Existing release tag to publish again (X.Y.Z+mcA.B.C or vX.Y.Z+mcA.B.C)
         required: true
         type: string
 
@@ -32,8 +32,8 @@ jobs:
       - name: Refuse a tag that already has a release
         shell: pwsh
         run: |
-          if ($env:RELEASE_TAG -notmatch '^v?\d+\.\d+\.\d+$') {
-            throw "'$env:RELEASE_TAG' is not a release tag. Expected X.Y.Z or vX.Y.Z."
+          if ($env:RELEASE_TAG -notmatch '^v?\d+\.\d+\.\d+\+mc\d+\.\d+(\.\d+)?$') {
+            throw "'$env:RELEASE_TAG' is not a release tag. Expected X.Y.Z+mcA.B.C or vX.Y.Z+mcA.B.C."
           }
           $response = gh api "repos/$env:GH_REPO/releases/tags/$env:RELEASE_TAG" 2>&1
           if ($LASTEXITCODE -eq 0) {
@@ -56,8 +56,10 @@ jobs:
           $tagged = git rev-parse "refs/tags/$($env:RELEASE_TAG)^{commit}"
           if ($head -ne $tagged) { throw "Checked out $head but $env:RELEASE_TAG points to $tagged." }
           $version = $env:RELEASE_TAG -replace '^v', ''
-          $declared = (Select-String -Path gradle.properties -Pattern '^mod_version=(.+)$').Matches[0].Groups[1].Value.Trim()
-          if ($declared -ne $version) { throw "Tag $env:RELEASE_TAG does not match mod_version=$declared in gradle.properties." }
+          $mod = (Select-String -Path gradle.properties -Pattern '^mod_version=(.+)$').Matches[0].Groups[1].Value.Trim()
+          $mc = (Select-String -Path gradle.properties -Pattern '^minecraft_version=(.+)$').Matches[0].Groups[1].Value.Trim()
+          $declared = "$mod+mc$mc"
+          if ($declared -ne $version) { throw "Tag $env:RELEASE_TAG does not match mod_version+mc+minecraft_version ($declared) in gradle.properties." }
           "RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Assemble release notes
