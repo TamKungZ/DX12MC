@@ -35,7 +35,7 @@ DX12MC hooks Minecraft at a small number of render and resource choke points:
 - `BufferUploader` for immediate mesh submissions.
 - `VertexBuffer` for persistent mesh uploads and draws.
 - `NativeImage`, `TextureUtil`, and texture-related calls for image upload data.
-- `GlStateManager`, `RenderSystem`, and `RenderTarget` where Minecraft still expects GL-shaped lifecycle or state calls.
+- `GlStateManager`, `RenderSystem`, and `RenderTarget` where Minecraft still expects GL-shaped lifecycle or state calls, including clears, texture parameters and the bound render target.
 - `Window.updateVsync`, `Options`, and `OptionInstance` so video settings either drive the D3D12 backend or are shown as unavailable.
 - `GlUtil` and `TimerQuery` so renderer information and GPU timing describe the D3D12 adapter instead of the bootstrap OpenGL context.
 
@@ -47,10 +47,11 @@ The bridge is responsible for converting Minecraft render inputs into data the b
 
 - `bridge.mesh` encodes vertex and index data into compact CPU-side batches; `MeshStore` owns CPU captures and bounded GPU residency.
 - `bridge.texture` tracks image revisions and uploads texture regions progressively. `MipLevel` owns pixel/dirty-region state and merges dirty regions when one larger update is cheaper than several, while `TextureEntry` owns CPU-to-GPU synchronization.
-- `bridge.shader` maps supported vertex formats and render types to shader families.
+- `bridge.shader` describes each vanilla core shader program (alpha test, fog mode and space, lightmap lookup, diffuse lighting, overlay) so the native programs reproduce it; a test checks the table against the shader sources in the Minecraft jar.
 - `bridge.state` tracks Minecraft render state separately from the bgfx bit encoder and scissor conversion.
 - `DrawContextFactory` resolves per-draw matrices, shader semantics, textures, and state without allocating on the steady-state path.
-- `graphics.pipeline.PipelineSet` owns pipeline resources and routes draws to the color, texture, or lightmap pipeline.
+- `graphics.pipeline.PipelineSet` owns pipeline resources and routes draws to the colour, texture, lightmapped or entity pipeline, each with an alpha-test variant. Opaque programs never discard, so they keep early depth testing.
+- Minecraft's mid-frame clears start a new sequential bgfx view on the backbuffer with the requested clear flags.
 - `Bridge` is the native-rendering facade and coordinates draw submission across these components.
 
 The Minecraft-facing `Controller` remains the stable integration API. `RendererLifecycle` owns backend initialization, frame and present boundaries, fatal state, and shutdown; `SectionRenderContext` owns the reusable transforms for compiled section layers.
@@ -88,6 +89,7 @@ DX12MC does not try to make every Minecraft render path work by mixing native D3
 Examples of intentionally limited behavior:
 
 - legacy menu blur is omitted until native render-target or post-processing support exists, and the Fabulous graphics mode is not offered for the same reason;
+- OpenGL post chains (spectator effects, glowing-entity outlines) are skipped, and draws issued while an offscreen render target is bound are not drawn to the screen;
 - automatic singleplayer world-icon capture is omitted until native readback exists;
 - unsupported thick-line rendering is skipped at the mesh choke point.
 
