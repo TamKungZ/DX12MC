@@ -240,7 +240,7 @@ class VideoSettingsOriginTest {
     String drawContext = read("bridge/DrawContextFactory.java");
     assertTrue(
         drawContext.contains(
-            "if (classifiedShaderGlint) applyGlintAlpha(RenderSystem.getShaderGlintAlpha());"));
+            "if (semantics.glintAlpha()) applyGlintAlpha(RenderSystem.getShaderGlintAlpha());"));
   }
 
   @Test
@@ -430,7 +430,7 @@ class VideoSettingsOriginTest {
         method(OPTIONS, callback.getName(), callback.getDesc()), owner, name, descriptor);
   }
 
-  private static boolean invokes(MethodNode method, String owner, String name, String descriptor) {
+  static boolean invokes(MethodNode method, String owner, String name, String descriptor) {
     for (AbstractInsnNode insn : method.instructions) {
       if (insn instanceof MethodInsnNode call
           && call.owner.equals(owner)
@@ -449,7 +449,7 @@ class VideoSettingsOriginTest {
     return count;
   }
 
-  private static int indexOf(MethodNode method, String owner, String name) {
+  static int indexOf(MethodNode method, String owner, String name) {
     int index = 0;
     for (AbstractInsnNode insn : method.instructions) {
       if (insn instanceof MethodInsnNode call && call.owner.equals(owner) && call.name.equals(name))
@@ -459,11 +459,11 @@ class VideoSettingsOriginTest {
     return -1;
   }
 
-  private static boolean readsStatic(MethodNode method, String owner, String field) {
+  static boolean readsStatic(MethodNode method, String owner, String field) {
     return accessesStatic(method, owner, field, Opcodes.GETSTATIC);
   }
 
-  private static boolean writesStatic(MethodNode method, String owner, String field) {
+  static boolean writesStatic(MethodNode method, String owner, String field) {
     return accessesStatic(method, owner, field, Opcodes.PUTSTATIC);
   }
 
@@ -477,7 +477,7 @@ class VideoSettingsOriginTest {
     return false;
   }
 
-  private static MethodNode method(String owner, String name, String descriptor) {
+  static MethodNode method(String owner, String name, String descriptor) {
     ClassNode node = classNode(owner);
     List<MethodNode> matches = new ArrayList<>();
     for (MethodNode method : node.methods) {
@@ -500,13 +500,13 @@ class VideoSettingsOriginTest {
     }
   }
 
-  private static Set<String> withoutDescriptors(Set<String> callers) {
+  static Set<String> withoutDescriptors(Set<String> callers) {
     Set<String> names = new TreeSet<>();
     for (String caller : callers) names.add(caller.substring(0, caller.indexOf('(')));
     return names;
   }
 
-  private static synchronized Set<String> callersOf(String target) {
+  static synchronized Set<String> callersOf(String target) {
     if (callers == null) callers = indexMinecraftCalls();
     return callers.getOrDefault(target, Set.of());
   }
