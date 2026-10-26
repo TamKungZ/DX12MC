@@ -20,7 +20,8 @@
     "FrameProfileMixin",
     "FrameProfileInvoker",
     "OptionsMixin",
-    "OptionInstanceMixin"
+    "OptionInstanceMixin",
+    "PostChainMixin"
   ],
   "injectors": {
     "defaultRequire": 1
