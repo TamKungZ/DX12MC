@@ -9,6 +9,7 @@ public final class SwapChain {
   private FrameSize size = new FrameSize(1, 1);
   private boolean vsync;
   private boolean resetPending;
+  private boolean presentedSinceReset;
 
   public void vsync(boolean enabled) {
     if (vsync == enabled) return;
@@ -37,6 +38,15 @@ public final class SwapChain {
   public boolean takeResetPending() {
     boolean pending = resetPending;
     resetPending = false;
+    if (pending) presentedSinceReset = false;
     return pending;
+  }
+
+  public void presented() {
+    presentedSinceReset = true;
+  }
+
+  public boolean holdsPresentedFrame() {
+    return presentedSinceReset;
   }
 }
