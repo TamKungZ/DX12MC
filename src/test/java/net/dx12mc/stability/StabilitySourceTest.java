@@ -255,8 +255,9 @@ class StabilitySourceTest {
     assertTrue(layout.contains("if (entity)"));
     assertTrue(layout.contains("BGFX_ATTRIB_TEXCOORD1"));
     assertTrue(layout.contains("BGFX_ATTRIB_NORMAL"));
-    assertTrue(packing.contains("VERTEX_STRIDE = 32"));
-    assertTrue(packing.contains("ENTITY_VERTEX_STRIDE = 44"));
+    assertTrue(packing.contains("VERTEX_STRIDE = 28"));
+    assertTrue(packing.contains("ENTITY_VERTEX_STRIDE = 40"));
+    assertTrue(layout.contains("BGFX_ATTRIB_TEXCOORD2, 2, BGFX_ATTRIB_TYPE_INT16, false, true"));
     assertFalse(encoder.contains("retainExtendedAttributes"));
     assertTrue(bridge.contains("ShaderSemantics.of(shader)"));
     assertTrue(bridge.contains("RenderSystem.getShaderTexture(2)"));
