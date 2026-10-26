@@ -8,13 +8,27 @@ public final class Layout implements AutoCloseable {
   private BGFXVertexLayout value;
 
   public Layout() {
+    this(false);
+  }
+
+  private Layout(boolean entity) {
     value = BGFXVertexLayout.calloc();
     bgfx_vertex_layout_begin(value, BGFX_RENDERER_TYPE_DIRECT3D12);
     bgfx_vertex_layout_add(value, BGFX_ATTRIB_POSITION, 3, BGFX_ATTRIB_TYPE_FLOAT, false, false);
     bgfx_vertex_layout_add(value, BGFX_ATTRIB_COLOR0, 4, BGFX_ATTRIB_TYPE_UINT8, true, false);
     bgfx_vertex_layout_add(value, BGFX_ATTRIB_TEXCOORD0, 2, BGFX_ATTRIB_TYPE_FLOAT, false, false);
+    if (entity) {
+      bgfx_vertex_layout_add(value, BGFX_ATTRIB_TEXCOORD1, 2, BGFX_ATTRIB_TYPE_FLOAT, false, false);
+    }
     bgfx_vertex_layout_add(value, BGFX_ATTRIB_TEXCOORD2, 2, BGFX_ATTRIB_TYPE_FLOAT, false, false);
+    if (entity) {
+      bgfx_vertex_layout_add(value, BGFX_ATTRIB_NORMAL, 4, BGFX_ATTRIB_TYPE_UINT8, true, false);
+    }
     bgfx_vertex_layout_end(value);
+  }
+
+  public static Layout entity() {
+    return new Layout(true);
   }
 
   public BGFXVertexLayout value() {
