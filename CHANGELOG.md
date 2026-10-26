@@ -4,6 +4,19 @@ Note: 0.9.0 is the version that fixes the low FPS problem. On a GT1030 it perfor
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
+## 0.10.0 - Rendering fidelity
+
+- Translate Minecraft's mid-frame OpenGL clears to Direct3D 12. Each clear starts a new bgfx view, so the depth clears before the first-person hand and before the GUI take effect, and the level is cleared to the fog colour Minecraft sets.
+- Translate immediate draws (GUI, HUD, text, entities, particles, hand) with Minecraft's actual depth, cull, colour-mask and blend state instead of a fixed compatibility state that always tested and wrote depth and forced alpha blending.
+- Reproduce each vanilla core shader's fragment rules: the alpha discard threshold (alpha 0 for GUI, 0.1 for text, entities and particles, 0.5 for `cutout_mipped`) and whether it tests the texture alone, red-channel intensity text, and the lightmap lookup (filtered per vertex for terrain, texel fetch for entities, particles and text).
+- Add vanilla fog to every D3D12 program that uses it, from Minecraft's fog start, end, colour and shape, in the same distance space and mode (linear or fade) as the vanilla shader. This covers render-distance, water, lava, powder snow, blindness, darkness, nether, end and boss fog.
+- Light entities and items with Minecraft's diffuse light directions and normals, and apply the hurt and flash overlay, through a separate entity vertex layout. Terrain keeps its 32-byte layout.
+- Take texture filtering, wrapping and the mip range from Minecraft's OpenGL texture parameters. The lightmap is now sampled with linear filtering, the block atlas blends between mip levels, and sampling never goes past the last uploaded mip level.
+- Mirror single-channel textures the way OpenGL samples them (red only), so unicode-font glyphs are no longer drawn as solid boxes.
+- Skip draws aimed at offscreen render targets and OpenGL post chains (glowing-entity outlines, spectator effects) instead of drawing them onto the screen. Menu Background Blur stays disabled.
+- Draw Minecraft's line geometry. Lines (block outline, F3 axes, hitboxes, fishing line) are expanded to screen-space quads the way `rendertype_lines` does, and debug lines (F3+G chunk borders) are drawn as line primitives. Previously block outlines and the F3 axes were omitted, and fishing lines and debug line strips ended the game.
+- F2 screenshots and singleplayer world icons are read back from the Direct3D 12 frame through bgfx and saved by Minecraft's own screenshot code, with the same file names and chat messages.
+
 ## 0.9.2 - Video settings, F3 and license change
 
 - VSync in Video Settings now sets the D3D12 present mode through bgfx and takes effect on the next frame. `-Ddx12mc.vsync` is no longer read, so VSync follows the vanilla option, which defaults to on.
