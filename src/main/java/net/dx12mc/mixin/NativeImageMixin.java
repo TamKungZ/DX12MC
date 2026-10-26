@@ -34,9 +34,6 @@ public abstract class NativeImageMixin {
             unpackSkipPixels,
             unpackSkipRows,
             width,
-            height,
-            blur,
-            clamp,
-            mipmap);
+            height);
   }
 }
