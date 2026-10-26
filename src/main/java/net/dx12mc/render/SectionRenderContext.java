@@ -62,6 +62,18 @@ final class SectionRenderContext {
     return sectionOrigin(cameraZ, offsetZ);
   }
 
+  float offsetX() {
+    return offsetX;
+  }
+
+  float offsetY() {
+    return offsetY;
+  }
+
+  float offsetZ() {
+    return offsetZ;
+  }
+
   double cameraX() {
     return cameraX;
   }
