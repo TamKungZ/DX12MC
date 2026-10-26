@@ -96,6 +96,33 @@ class PackingTest {
   }
 
   @Test
+  void lineVerticesCarryTheVertexIdParitySideAndTheLineDirection() {
+    Batch batch =
+        new Batch(
+            new float[12],
+            new int[4],
+            new float[0],
+            false,
+            new short[0],
+            false,
+            new short[0],
+            false,
+            new byte[] {127, 0, 0, 127, 0, 0, 127, 0, 0, 127, 0, 0},
+            true,
+            new int[] {0, 1, 2, 3, 2, 1},
+            4,
+            VertexFormat.Mode.LINES);
+    ByteBuffer out =
+        ByteBuffer.allocate(Packing.ENTITY_VERTEX_STRIDE * 4).order(ByteOrder.nativeOrder());
+    Packing.lineVertices(out, batch);
+    for (int vertex = 0; vertex < 4; vertex++) {
+      int base = vertex * Packing.ENTITY_VERTEX_STRIDE;
+      assertEquals(vertex % 2 == 0 ? 1.0f : -1.0f, out.getFloat(base + 16));
+      assertEquals(1.0f, (Byte.toUnsignedInt(out.get(base + 40)) - 128) / 127.0f);
+    }
+  }
+
+  @Test
   void selectsThirtyTwoBitIndicesOnlyWhenNeeded() {
     assertFalse(Packing.index32(new int[] {0, 1, 65535}));
     assertTrue(Packing.index32(new int[] {0, 65536}));
