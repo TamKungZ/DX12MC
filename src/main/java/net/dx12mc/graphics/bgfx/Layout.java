@@ -20,7 +20,7 @@ public final class Layout implements AutoCloseable {
     if (entity) {
       bgfx_vertex_layout_add(value, BGFX_ATTRIB_TEXCOORD1, 2, BGFX_ATTRIB_TYPE_FLOAT, false, false);
     }
-    bgfx_vertex_layout_add(value, BGFX_ATTRIB_TEXCOORD2, 2, BGFX_ATTRIB_TYPE_FLOAT, false, false);
+    bgfx_vertex_layout_add(value, BGFX_ATTRIB_TEXCOORD2, 2, BGFX_ATTRIB_TYPE_INT16, false, true);
     if (entity) {
       bgfx_vertex_layout_add(value, BGFX_ATTRIB_NORMAL, 4, BGFX_ATTRIB_TYPE_UINT8, true, false);
     }
