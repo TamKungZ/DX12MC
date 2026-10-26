@@ -7,9 +7,11 @@ import net.dx12mc.bridge.Stats;
 import net.dx12mc.config.Config;
 import net.dx12mc.debug.Scene;
 import net.dx12mc.graphics.FrameSize;
+import net.dx12mc.graphics.RendererInfo;
 import net.dx12mc.graphics.bgfx.Backend;
 import net.dx12mc.graphics.bgfx.Probe;
 import net.dx12mc.graphics.bgfx.ProbeResult;
+import net.dx12mc.mixin.RenderSystemAccessor;
 import net.dx12mc.platform.win32.WindowHandle;
 import net.minecraft.client.Minecraft;
 
@@ -24,6 +26,7 @@ final class RendererLifecycle implements AutoCloseable {
   private boolean frameOpen;
   private FatalRenderException failure;
   private FrameSize currentFrameSize = new FrameSize(1, 1);
+  private RendererInfo rendererInfo;
 
   RendererLifecycle(Config config, Bridge bridge, Stats stats) {
     this.config = config;
@@ -34,12 +37,14 @@ final class RendererLifecycle implements AutoCloseable {
 
   void initialize() {
     DX12MC.LOGGER.info(
-        "DX12MC {} loaded. mode={}, vsync={}, overlay={}, strictD3D12={}",
+        "DX12MC {} loaded. mode={}, overlay={}, strictD3D12={}",
         DX12MC.VERSION,
         config.mode(),
-        config.vsync(),
         config.overlay(),
         !config.probeMode());
+    if (System.getProperty("dx12mc.vsync") != null) {
+      DX12MC.LOGGER.warn("-Ddx12mc.vsync is no longer read. VSync follows Video Settings > VSync.");
+    }
     if (config.probeMode()) {
       DX12MC.LOGGER.warn(
           "PROBE MODE: renderer takeover is intentionally disabled; vanilla OpenGL may present"
@@ -148,6 +153,18 @@ final class RendererLifecycle implements AutoCloseable {
     return state == State.CLOSED;
   }
 
+  void vsync(boolean enabled) {
+    backend.vsync(enabled);
+  }
+
+  RendererInfo rendererInfo() {
+    return state == State.ACTIVE ? rendererInfo : null;
+  }
+
+  long gpuFrameNanos() {
+    return state == State.ACTIVE ? backend.gpuFrameNanos() : 0L;
+  }
+
   boolean openGlGuardAllowed() {
     return config.probeMode()
         || state == State.NEW
@@ -188,11 +205,7 @@ final class RendererLifecycle implements AutoCloseable {
       return;
     }
     backend.initialize(
-        hwnd,
-        frameSize(window),
-        config.vsync(),
-        config.clearColorRgba(),
-        config.debugMode() || config.overlay());
+        hwnd, frameSize(window), config.clearColorRgba(), config.debugMode() || config.overlay());
     if (config.nativeMode()) {
       bridge.start();
       DX12MC.LOGGER.warn(
@@ -206,7 +219,9 @@ final class RendererLifecycle implements AutoCloseable {
     DX12MC.LOGGER.warn(
         "D3D12 PRESENT OWNER ACTIVE: GLFW window/event lifecycle remains, OpenGL context may"
             + " remain for bootstrap compatibility, but OpenGL SwapBuffers is disabled.");
+    rendererInfo = backend.adapter().rendererInfo(DX12MC.VERSION);
     state = State.ACTIVE;
+    RenderSystemAccessor.dx12mc$setApiDescription(rendererInfo.apiDescription());
   }
 
   private void closeNativeResources() {
