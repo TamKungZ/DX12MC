@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexBuffer;
+import java.util.function.Consumer;
 import net.dx12mc.bridge.Slot;
 import net.dx12mc.config.Config;
 import net.dx12mc.graphics.RendererInfo;
@@ -250,12 +251,20 @@ public final class Runtime implements AutoCloseable {
     return controller.suppressLegacyBlurPostProcess();
   }
 
-  public boolean suppressAutomaticWorldIconCapture() {
-    return controller.suppressAutomaticWorldIconCapture();
+  public boolean ownsScreenCapture() {
+    return controller.ownsScreenCapture();
   }
 
-  public boolean suppressManualScreenshotCapture() {
-    return controller.suppressManualScreenshotCapture();
+  public void requestScreenCapture(Runnable onCaptured, Consumer<String> onFailure) {
+    controller.requestScreenCapture(onCaptured, onFailure);
+  }
+
+  public boolean hasCapturedScreenshot() {
+    return controller.hasCapturedScreenshot();
+  }
+
+  public NativeImage takeCapturedScreenshot() {
+    return controller.takeCapturedScreenshot();
   }
 
   public void assertOpenGlDrawAllowed(String operation) {
