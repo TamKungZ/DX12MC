@@ -24,7 +24,7 @@ class RegistryMipLevelTest {
 
     assertEquals(256 * 4L, registry.allocatedCpuBytes());
     try (NativeImage level1 = new NativeImage(NativeImage.Format.RGBA, 8, 8, true)) {
-      assertFalse(registry.upload(level1, 1, 0, 0, 0, 0, 8, 8, false, false, true));
+      assertFalse(registry.upload(level1, 1, 0, 0, 0, 0, 8, 8));
     }
   }
 
@@ -39,7 +39,7 @@ class RegistryMipLevelTest {
     registry.allocate(ATLAS, 2, 16, 16);
 
     try (NativeImage level2 = new NativeImage(NativeImage.Format.RGBA, 4, 4, true)) {
-      assertTrue(registry.upload(level2, 2, 0, 0, 0, 0, 4, 4, false, false, true));
+      assertTrue(registry.upload(level2, 2, 0, 0, 0, 0, 4, 4));
     }
   }
 
@@ -59,7 +59,7 @@ class RegistryMipLevelTest {
     for (int level = 0; level <= maxLevel; level++) {
       int size = 16 >> level;
       try (NativeImage image = new NativeImage(NativeImage.Format.RGBA, size, size, true)) {
-        assertTrue(registry.upload(image, level, 0, 0, 0, 0, size, size, false, false, true));
+        assertTrue(registry.upload(image, level, 0, 0, 0, 0, size, size));
       }
     }
   }
