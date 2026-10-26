@@ -107,7 +107,7 @@ public final class Encoder {
         explicit != null
             ? state.indexCount()
             : Indices.triangleIndexCount(state.mode(), vertexCount);
-    if (indexCount <= 0 || indexCount % 3 != 0) return null;
+    if (!Indices.completePrimitives(state.mode(), indexCount)) return null;
     int[] indices = scratch == null ? new int[indexCount] : scratch.indices(indexCount);
     if (explicit != null) {
       if (!decodeIndicesInto(
