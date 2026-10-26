@@ -58,6 +58,36 @@ public final class Packing {
     }
   }
 
+  public static void lineVertices(ByteBuffer target, Batch batch) {
+    ByteOrder order = ByteOrder.nativeOrder();
+    target.order(order);
+    boolean reverseColor = order == ByteOrder.LITTLE_ENDIAN;
+    float[] positions = batch.positions();
+    int[] colors = batch.colors();
+    byte[] normals = batch.normals();
+    int count = batch.vertexCount();
+    for (int vertex = 0; vertex < count; vertex++) {
+      int p = vertex * 3;
+      int dst = vertex * ENTITY_VERTEX_STRIDE;
+      int rgba = colors[vertex];
+      target.putFloat(dst, positions[p]);
+      target.putFloat(dst + 4, positions[p + 1]);
+      target.putFloat(dst + 8, positions[p + 2]);
+      target.putInt(dst + 12, reverseColor ? Integer.reverseBytes(rgba) : rgba);
+      target.putFloat(dst + 16, lineSide(vertex));
+      target.putFloat(dst + 20, 0.0f);
+      target.putFloat(dst + 24, 0.0f);
+      target.putFloat(dst + 28, 0.0f);
+      target.putFloat(dst + 32, 0.0f);
+      target.putFloat(dst + 36, 0.0f);
+      target.putInt(dst + 40, packNormal(normals, p));
+    }
+  }
+
+  static float lineSide(int vertex) {
+    return (vertex & 1) == 0 ? 1.0f : -1.0f;
+  }
+
   public static void entityVertices(ByteBuffer target, Batch batch) {
     ByteOrder order = ByteOrder.nativeOrder();
     target.order(order);
