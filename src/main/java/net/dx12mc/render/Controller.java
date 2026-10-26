@@ -6,11 +6,16 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexBuffer;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
+import net.dx12mc.DX12MC;
 import net.dx12mc.bridge.Bridge;
 import net.dx12mc.bridge.Slot;
 import net.dx12mc.bridge.Stats;
 import net.dx12mc.config.Config;
 import net.dx12mc.graphics.RendererInfo;
+import net.dx12mc.graphics.bgfx.ScreenCapture;
 import net.dx12mc.graphics.bgfx.ViewSequence;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderType;
@@ -27,6 +32,11 @@ public final class Controller implements AutoCloseable {
   private int clearRgba;
   private float clearDepth = 1.0f;
   private boolean offscreenTargetBound;
+  private static final int SCREEN_CAPTURE_TIMEOUT_FRAMES = 60;
+  private final List<CaptureRequest> captureRequests = new ArrayList<>();
+  private boolean captureInFlight;
+  private int captureWaitFrames;
+  private NativeImage capturedScreenshot;
   private static final int GL_ARRAY_BUFFER = 0x8892;
 
   public Controller(Config config) {
@@ -249,7 +259,66 @@ public final class Controller implements AutoCloseable {
 
   public void onRenderHead(Minecraft minecraft) {
     lifecycle.ensureInitialized(minecraft);
+    if (captureInFlight) deliverScreenCapture();
   }
+
+  public boolean ownsScreenCapture() {
+    if (config.probeMode()) return false;
+    throwIfFailed();
+    return lifecycle.active();
+  }
+
+  public void requestScreenCapture(Runnable onCaptured, Consumer<String> onFailure) {
+    captureRequests.add(new CaptureRequest(onCaptured, onFailure));
+  }
+
+  public boolean hasCapturedScreenshot() {
+    return capturedScreenshot != null;
+  }
+
+  public NativeImage takeCapturedScreenshot() {
+    NativeImage image = capturedScreenshot;
+    capturedScreenshot = null;
+    return image;
+  }
+
+  private void deliverScreenCapture() {
+    ScreenCapture.Frame frame = lifecycle.takeScreenCapture();
+    if (frame == null) {
+      if (++captureWaitFrames > SCREEN_CAPTURE_TIMEOUT_FRAMES) {
+        failScreenCaptures("bgfx did not return the requested screen capture");
+      }
+      return;
+    }
+    List<CaptureRequest> requests = new ArrayList<>(captureRequests);
+    captureRequests.clear();
+    captureInFlight = false;
+    captureWaitFrames = 0;
+    try {
+      for (CaptureRequest request : requests) {
+        capturedScreenshot = ScreenImages.toNativeImage(frame);
+        try {
+          request.onCaptured().run();
+        } finally {
+          NativeImage unused = takeCapturedScreenshot();
+          if (unused != null) unused.close();
+        }
+      }
+    } finally {
+      ScreenCapture.free(frame);
+    }
+  }
+
+  private void failScreenCaptures(String reason) {
+    DX12MC.LOGGER.warn("D3D12 screen capture failed: {}", reason);
+    List<CaptureRequest> requests = new ArrayList<>(captureRequests);
+    captureRequests.clear();
+    captureInFlight = false;
+    captureWaitFrames = 0;
+    for (CaptureRequest request : requests) request.onFailure().accept(reason);
+  }
+
+  private record CaptureRequest(Runnable onCaptured, Consumer<String> onFailure) {}
 
   public boolean draw(Slot slot, Matrix4f modelView, Matrix4f projection) {
     if (!config.nativeMode()) return false;
@@ -406,6 +475,9 @@ public final class Controller implements AutoCloseable {
   }
 
   public void presentAtSwap(Minecraft minecraft) {
+    if (!captureInFlight && !captureRequests.isEmpty() && lifecycle.active()) {
+      captureInFlight = lifecycle.requestScreenCapture(minecraft);
+    }
     lifecycle.present(minecraft);
   }
 
@@ -453,20 +525,6 @@ public final class Controller implements AutoCloseable {
     return true;
   }
 
-  public boolean suppressAutomaticWorldIconCapture() {
-    if (config.probeMode()) return false;
-    throwIfFailed();
-    if (!lifecycle.active()) return false;
-    stats.suppressedAutomaticWorldIconCapture();
-    return true;
-  }
-
-  public boolean suppressManualScreenshotCapture() {
-    if (config.probeMode()) return false;
-    throwIfFailed();
-    return lifecycle.active();
-  }
-
   public void assertOpenGlDrawAllowed(String operation) {
     if (lifecycle.openGlGuardAllowed()) return;
     throwIfFailed();
@@ -503,6 +561,10 @@ public final class Controller implements AutoCloseable {
   @Override
   public void close() {
     if (lifecycle.closed()) return;
+    captureRequests.clear();
+    captureInFlight = false;
+    NativeImage pending = takeCapturedScreenshot();
+    if (pending != null) pending.close();
     section.end();
     legacyVertexBufferUploadDepth = 0;
     lifecycle.close();
