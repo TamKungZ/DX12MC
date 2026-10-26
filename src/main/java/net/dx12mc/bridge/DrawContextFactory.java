@@ -22,6 +22,7 @@ final class DrawContextFactory {
   private String classifiedShaderName;
   private ShaderFamily classifiedShaderFamily = ShaderFamily.BASIC;
   private boolean classifiedShaderCutout;
+  private boolean classifiedShaderGlint;
   private boolean skyIntent;
   private boolean sectionContextPrepared;
   private float sectionDepthBias;
@@ -40,6 +41,7 @@ final class DrawContextFactory {
     prepareUniforms(modelView, projection);
     String shader = shaderName();
     classifyShader(shader);
+    if (classifiedShaderGlint) applyGlintAlpha(RenderSystem.getShaderGlintAlpha());
     Texture sampled = resolveBaseTexture(batch, shader);
     Texture lightmap = immediate ? null : resolveLightmap(batch, classifiedShaderFamily);
     RenderState.Snapshot state = snapshot(framebufferWidth, framebufferHeight, immediate);
@@ -106,6 +108,12 @@ final class DrawContextFactory {
     System.arraycopy(RenderSystem.getShaderColor(), 0, tint, 0, tint.length);
   }
 
+  void applyGlintAlpha(float glintAlpha) {
+    tint[0] *= glintAlpha;
+    tint[1] *= glintAlpha;
+    tint[2] *= glintAlpha;
+  }
+
   private void applyDepthBias(float bias) {
     if (bias == 0.0f) return;
     matrix[2] += bias * matrix[3];
@@ -126,6 +134,7 @@ final class DrawContextFactory {
     classifiedShaderName = shader;
     classifiedShaderFamily = ShaderFamily.classify(shader);
     classifiedShaderCutout = shader != null && shader.toLowerCase(Locale.ROOT).contains("cutout");
+    classifiedShaderGlint = ShaderFamily.usesGlintAlpha(shader);
   }
 
   private Texture resolveBaseTexture(Batch batch, String shader) {
