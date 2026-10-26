@@ -26,10 +26,8 @@ public final class RenderState {
   private int logicOp = 0x1503;
   private long revision;
   private Snapshot cachedStandard;
-  private Snapshot cachedImmediate;
   private Snapshot cachedSky;
   private int cachedStandardWidth, cachedStandardHeight;
-  private int cachedImmediateWidth, cachedImmediateHeight;
   private int cachedSkyWidth, cachedSkyHeight;
 
   public void depthTest(boolean enabled) {
@@ -187,30 +185,6 @@ public final class RenderState {
             blend,
             cull);
     return cachedStandard;
-  }
-
-  public Snapshot immediateCompatibilitySnapshot(int framebufferWidth, int framebufferHeight) {
-    validateUnsupportedState();
-    if (matches(
-        cachedImmediate,
-        cachedImmediateWidth,
-        cachedImmediateHeight,
-        framebufferWidth,
-        framebufferHeight)) {
-      return cachedImmediate;
-    }
-    cachedImmediateWidth = framebufferWidth;
-    cachedImmediateHeight = framebufferHeight;
-    cachedImmediate =
-        snapshot(
-            BgfxStateEncoder.immediate(blend, srcRgb, dstRgb, srcAlpha, dstAlpha, blendEquation),
-            framebufferWidth,
-            framebufferHeight,
-            true,
-            true,
-            true,
-            false);
-    return cachedImmediate;
   }
 
   public Snapshot skyCompatibilitySnapshot(int framebufferWidth, int framebufferHeight) {
