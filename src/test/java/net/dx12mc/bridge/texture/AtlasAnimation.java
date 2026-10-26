@@ -38,6 +38,6 @@ public final class AtlasAnimation {
 
   private void upload(int level, int x, int y) {
     int size = tiles[level].getWidth();
-    image.upload(tiles[level], level, x, y, 0, 0, size, size, false, false, true);
+    image.upload(tiles[level], level, x, y, 0, 0, size, size);
   }
 }
