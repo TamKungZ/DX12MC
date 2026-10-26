@@ -5,8 +5,8 @@ import java.nio.ByteOrder;
 import net.dx12mc.bridge.mesh.Batch;
 
 public final class Packing {
-  public static final int VERTEX_STRIDE = 32;
-  public static final int ENTITY_VERTEX_STRIDE = 44;
+  public static final int VERTEX_STRIDE = 28;
+  public static final int ENTITY_VERTEX_STRIDE = 40;
   private static final int NORMAL_UP =
       ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN
           ? Integer.reverseBytes(0x80FF80FF)
@@ -53,8 +53,8 @@ public final class Packing {
       target.putInt(dst + 12, reverseColor ? Integer.reverseBytes(rgba) : rgba);
       target.putFloat(dst + 16, hasUv0 ? uv0[uv] : 0.0f);
       target.putFloat(dst + 20, hasUv0 ? uv0[uv + 1] : 0.0f);
-      target.putFloat(dst + 24, hasUv2 ? Short.toUnsignedInt(uv2[uv]) : 0.0f);
-      target.putFloat(dst + 28, hasUv2 ? Short.toUnsignedInt(uv2[uv + 1]) : 0.0f);
+      target.putShort(dst + 24, hasUv2 ? uv2[uv] : 0);
+      target.putShort(dst + 26, hasUv2 ? uv2[uv + 1] : 0);
     }
   }
 
@@ -78,9 +78,8 @@ public final class Packing {
       target.putFloat(dst + 20, 0.0f);
       target.putFloat(dst + 24, 0.0f);
       target.putFloat(dst + 28, 0.0f);
-      target.putFloat(dst + 32, 0.0f);
-      target.putFloat(dst + 36, 0.0f);
-      target.putInt(dst + 40, packNormal(normals, p));
+      target.putInt(dst + 32, 0);
+      target.putInt(dst + 36, packNormal(normals, p));
     }
   }
 
@@ -116,9 +115,9 @@ public final class Packing {
       target.putFloat(dst + 20, hasUv0 ? uv0[uv + 1] : 0.0f);
       target.putFloat(dst + 24, hasUv1 ? uv1[uv] : 0.0f);
       target.putFloat(dst + 28, hasUv1 ? uv1[uv + 1] : 0.0f);
-      target.putFloat(dst + 32, hasUv2 ? Short.toUnsignedInt(uv2[uv]) : 0.0f);
-      target.putFloat(dst + 36, hasUv2 ? Short.toUnsignedInt(uv2[uv + 1]) : 0.0f);
-      target.putInt(dst + 40, hasNormal ? packNormal(normals, p) : NORMAL_UP);
+      target.putShort(dst + 32, hasUv2 ? uv2[uv] : 0);
+      target.putShort(dst + 34, hasUv2 ? uv2[uv + 1] : 0);
+      target.putInt(dst + 36, hasNormal ? packNormal(normals, p) : NORMAL_UP);
     }
   }
 
