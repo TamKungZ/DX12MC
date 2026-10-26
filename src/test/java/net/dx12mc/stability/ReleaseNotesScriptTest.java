@@ -19,8 +19,9 @@ class ReleaseNotesScriptTest {
 
   @Test
   void notesStartWithTheChangelogHeadingThenEveryNoteThenTheTaggedSection() throws Exception {
-    for (String tag : new String[] {"0.11.0", "v0.11.0", "0.10.0", "0.9.0"}) {
-      String version = tag.replaceFirst("^v", "");
+    for (String tag :
+        new String[] {"0.11.0", "v0.11.0", "0.11.0+mc1.21.1", "v0.10.0+mc1.21.1", "0.9.0"}) {
+      String version = tag.replaceFirst("^v", "").replaceFirst("[+]mc.*$", "");
       Result result = run(tag, CHANGELOG);
       assertEquals(0, result.exit(), tag + ": " + result.output());
       List<String> notes = result.lines();
@@ -58,6 +59,7 @@ class ReleaseNotesScriptTest {
   void missingEmptyDuplicateOrMalformedReleasesFailWithoutWritingNotes() throws Exception {
     assertFails(run("0.0.1", CHANGELOG), "no '## 0.0.1' section");
     assertFails(run("release-1", CHANGELOG), "is not a release tag");
+    assertFails(run("0.11.0+beta", CHANGELOG), "is not a release tag");
     Path empty = temp.resolve("empty.md");
     Files.writeString(empty, "# Changelog\n\nNote: n\n\n## 1.0.0 - Empty\n\n\n## 0.9.0\n\n- x\n");
     assertFails(run("1.0.0", empty), "is empty");

@@ -27,8 +27,8 @@ class ReleaseWorkflowTest {
   @Test
   void runsForReleaseTagsOrARepeatedTagWithMinimalPermissions() throws IOException {
     String text = workflow();
-    assertTrue(text.contains("- '[0-9]+.[0-9]+.[0-9]+'"));
-    assertTrue(text.contains("- 'v[0-9]+.[0-9]+.[0-9]+'"));
+    assertTrue(text.contains("- '[0-9]*.[0-9]*.[0-9]*[+]mc*'"));
+    assertTrue(text.contains("- 'v[0-9]*.[0-9]*.[0-9]*[+]mc*'"));
     assertTrue(text.contains("workflow_dispatch:\n    inputs:\n      tag:"));
     assertTrue(text.contains("permissions:\n  contents: write\n  packages: write\n"));
     assertTrue(text.contains("ref: refs/tags/${{ env.RELEASE_TAG }}"));
@@ -64,6 +64,14 @@ class ReleaseWorkflowTest {
     assertTrue(text.contains("if: always()"));
     assertTrue(text.contains("--delete-secret-and-public-key $fingerprint"));
     assertTrue(text.contains("-Pdx12mc.requireSigning=true"));
+  }
+
+  @Test
+  void projectVersionIsModVersionPlusMinecraftVersion() throws IOException {
+    String build = Files.readString(Path.of("build.gradle.kts"));
+    assertTrue(
+        build.contains("version = \"${prop(\"mod_version\")}+mc${prop(\"minecraft_version\")}\""));
+    assertTrue(workflow().contains("$declared = \"$mod+mc$mc\""));
   }
 
   @Test
