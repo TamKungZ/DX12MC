@@ -13,9 +13,6 @@ final class BgfxStateEncoder {
   private static final long WRITE_Z = 0x0000004000000000L;
   private static final long CULL_CW = 0x0000001000000000L;
   private static final long MSAA = 0x0100000000000000L;
-  private static final long IMMEDIATE_COMPAT_BASE =
-      WRITE_R | WRITE_G | WRITE_B | WRITE_A | WRITE_Z | 0x20L | MSAA;
-  private static final long IMMEDIATE_COMPAT_ALPHA_BLEND = 0x0000000006565000L;
 
   private BgfxStateEncoder() {}
 
@@ -42,14 +39,6 @@ final class BgfxStateEncoder {
     if (blend) state |= blendBits(srcRgb, dstRgb, srcAlpha, dstAlpha) | equationBits(blendEquation);
     if (cull) state |= CULL_CW;
     return state;
-  }
-
-  static long immediate(
-      boolean blend, int srcRgb, int dstRgb, int srcAlpha, int dstAlpha, int blendEquation) {
-    if (!blend) return IMMEDIATE_COMPAT_BASE | IMMEDIATE_COMPAT_ALPHA_BLEND;
-    return IMMEDIATE_COMPAT_BASE
-        | blendBits(srcRgb, dstRgb, srcAlpha, dstAlpha)
-        | equationBits(blendEquation);
   }
 
   static long sky(
