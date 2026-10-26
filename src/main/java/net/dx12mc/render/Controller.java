@@ -10,6 +10,7 @@ import net.dx12mc.bridge.Bridge;
 import net.dx12mc.bridge.Slot;
 import net.dx12mc.bridge.Stats;
 import net.dx12mc.config.Config;
+import net.dx12mc.graphics.RendererInfo;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderType;
 import org.joml.Matrix4f;
@@ -369,6 +370,26 @@ public final class Controller implements AutoCloseable {
     return config.openGlPresentationAllowed();
   }
 
+  public void vsync(boolean enabled) {
+    lifecycle.vsync(enabled);
+  }
+
+  public RendererInfo rendererInfo() {
+    return lifecycle.rendererInfo();
+  }
+
+  public boolean ownsGpuTiming() {
+    return lifecycle.active();
+  }
+
+  public long gpuFrameNanos() {
+    return lifecycle.gpuFrameNanos();
+  }
+
+  public boolean legacyPostProcessingAvailable() {
+    return config.legacyPostProcessingAvailable();
+  }
+
   public boolean suppressVanillaFramebufferBlit() {
     if (config.probeMode()) return false;
     throwIfFailed();
@@ -382,7 +403,7 @@ public final class Controller implements AutoCloseable {
   }
 
   public boolean suppressLegacyBlurPostProcess() {
-    if (config.probeMode()) return false;
+    if (config.legacyPostProcessingAvailable()) return false;
     throwIfFailed();
     if (!lifecycle.active()) return false;
     stats.suppressedLegacyBlur();
