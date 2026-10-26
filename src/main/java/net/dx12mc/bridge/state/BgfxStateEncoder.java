@@ -57,6 +57,53 @@ final class BgfxStateEncoder {
     return state;
   }
 
+  // bgfx has no logic-op state. GL_OR_REVERSE (src | ~dst) is drawn as dst * (1 - src) followed by
+  // a constant-white pass blended as 1 - dst; exact wherever each source channel is 0 or 1.
+  static long orReverseMask(
+      boolean writeR,
+      boolean writeG,
+      boolean writeB,
+      boolean writeA,
+      boolean depthTest,
+      int depthFunc,
+      boolean depthWrite,
+      boolean cull) {
+    return logicPass(writeR, writeG, writeB, writeA, depthTest, depthFunc, depthWrite, cull)
+        | blendBits(GL_ZERO, 0x0301, GL_ZERO, 0x0303);
+  }
+
+  static long orReverseInvert(
+      boolean writeR,
+      boolean writeG,
+      boolean writeB,
+      boolean writeA,
+      boolean depthTest,
+      int depthFunc,
+      boolean depthWrite,
+      boolean cull) {
+    return logicPass(
+            writeR, writeG, writeB, writeA, depthTest, depthWrite ? 0x0202 : depthFunc, false, cull)
+        | blendBits(0x0307, GL_ZERO, 0x0305, GL_ZERO);
+  }
+
+  private static long logicPass(
+      boolean writeR,
+      boolean writeG,
+      boolean writeB,
+      boolean writeA,
+      boolean depthTest,
+      int depthFunc,
+      boolean depthWrite,
+      boolean cull) {
+    long state = colorWrites(writeR, writeG, writeB, writeA) | MSAA;
+    if (depthTest) {
+      state |= depthBits(depthFunc);
+      if (depthWrite) state |= WRITE_Z;
+    }
+    if (cull) state |= CULL_CW;
+    return state;
+  }
+
   private static long colorWrites(boolean red, boolean green, boolean blue, boolean alpha) {
     long state = 0L;
     if (red) state |= WRITE_R;
