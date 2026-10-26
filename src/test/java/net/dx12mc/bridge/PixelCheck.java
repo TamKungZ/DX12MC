@@ -52,6 +52,7 @@ final class PixelCheck {
       check.minifiedTerrainClampsToTheLastUploadedMipLevel();
       check.screenSpaceLineCoversItsWidth();
       check.debugLinePrimitiveIsRasterised();
+      check.textHighlightOrReverseLogicOp();
       check.screenCaptureReturnsThePresentedBackbuffer();
       check.measureFullHdScreenCapture();
       return check.failures;
@@ -252,6 +253,37 @@ final class PixelCheck {
     readFrame();
     expect("DEBUG_LINES draws a line primitive on its row", 255, 255, 0, pixel(20, 40));
     expect("and nothing beside it", 0, 0, 0, pixel(20, 44));
+  }
+
+  private void textHighlightOrReverseLogicOp() {
+    ShaderSemantics highlight = ShaderSemantics.of("rendertype_gui_text_highlight");
+    for (int alpha : new int[] {0xFF, 0x00}) {
+      begin(0x336699FF);
+      state.depthTest(false);
+      state.depthMask(true);
+      state.blend(true);
+      state.blendFuncSeparate(0x0302, 0x0303, 0x0001, 0x0303);
+      state.colorLogic(true);
+      state.logicOp(0x150B);
+      reset(context, highlight);
+      ShaderInputs.fog(highlight, 0, 1, 0, context.fogParams());
+      context.set(
+          DrawContext.Kind.COLOR,
+          null,
+          null,
+          null,
+          highlight.discards(),
+          state.snapshot(SIZE, SIZE));
+      draw(quad(0.5f, 0x0000FF00 | alpha), context);
+      state.colorLogic(false);
+      state.logicOp(0x1503);
+      state.blend(false);
+      if (alpha == 0xFF) {
+        expect("EditBox highlight 0xFF0000FF is OR_REVERSE: src | ~dst", 0xCC, 0x99, 0xFF, read());
+      } else {
+        expect("a zero-alpha highlight is discarded by both passes", 0x33, 0x66, 0x99, read());
+      }
+    }
   }
 
   private void screenCaptureReturnsThePresentedBackbuffer() {
