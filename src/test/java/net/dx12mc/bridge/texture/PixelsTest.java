@@ -15,6 +15,13 @@ class PixelsTest {
   }
 
   @Test
+  void redFormatTexelsExpandLikeOpenGlRedTextures() {
+    byte[] out = new byte[4];
+    Pixels.writeRedTexel(out, 0, (byte) 0x80);
+    assertArrayEquals(new byte[] {(byte) 0x80, 0, 0, (byte) 0xFF}, out);
+  }
+
+  @Test
   void rejectsOutOfRangeDestination() {
     assertThrows(
         IndexOutOfBoundsException.class, () -> Pixels.writeAbgrAsRgba(new byte[3], 0, 0xFFFFFFFF));
