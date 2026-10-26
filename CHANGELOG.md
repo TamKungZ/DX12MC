@@ -4,8 +4,14 @@ Note: 0.9.0 is the version that fixes the low FPS problem. On a GT1030 it perfor
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
-## 0.9.2 - License change
+## 0.9.2 - Video settings, F3 and license change
 
+- VSync in Video Settings now sets the D3D12 present mode through bgfx and takes effect on the next frame. `-Ddx12mc.vsync` is no longer read, so VSync follows the vanilla option, which defaults to on.
+- Lowering Mipmap Levels now removes the previous mip levels from the D3D12 texture mirror instead of keeping them.
+- Glint Strength now applies to D3D12 enchantment glint draws.
+- Graphics no longer offers Fabulous while D3D12 renders, because it needs OpenGL post-processing that DX12MC does not support. A saved Fabulous setting loads as Fancy.
+- Menu Background Blur is shown disabled with the reason, because DX12MC does not render menu blur.
+- F3 shows the Direct3D 12 adapter vendor and name and `Direct3D 12 (DX12MC <version>)` instead of the startup OpenGL context, and its GPU percentage comes from bgfx GPU timing. Crash reports name the D3D12 adapter under Backend API.
 - Relicense the source code from GPL-3.0 to LGPL-3.0-only and add a NOTICE file. The GPL-3.0 text is kept as `LICENSE-GPL-3.0` because the LGPL incorporates it. Earlier releases remain available under the GPL-3.0 terms they were published with.
 
 ## 0.9.1 - Review fixes
