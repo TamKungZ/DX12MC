@@ -16,9 +16,6 @@ public final class Image {
   private int maxLevel;
   private MipLevel[] levels;
   private long revision;
-  private boolean blur;
-  private boolean clamp;
-  private boolean mipmap;
 
   public Image(int width, int height, int maxLevel) {
     validateBaseSize(width, height);
@@ -39,10 +36,7 @@ public final class Image {
       int skipPixels,
       int skipRows,
       int uploadWidth,
-      int uploadHeight,
-      boolean blur,
-      boolean clamp,
-      boolean mipmap) {
+      int uploadHeight) {
     if (source == null || level < 0 || level > maxLevel) return false;
     if (uploadWidth <= 0
         || uploadHeight <= 0
@@ -63,9 +57,6 @@ public final class Image {
       }
     }
     target.markDirty(offsetX, offsetY, uploadWidth, uploadHeight);
-    this.blur = blur;
-    this.clamp = clamp;
-    this.mipmap = mipmap;
     revision++;
     return true;
   }
@@ -282,18 +273,6 @@ public final class Image {
 
   public long revision() {
     return revision;
-  }
-
-  public boolean blur() {
-    return blur;
-  }
-
-  public boolean clamp() {
-    return clamp;
-  }
-
-  public boolean mipmap() {
-    return mipmap && hasCompleteMipChain();
   }
 
   public long allocatedCpuBytes() {
