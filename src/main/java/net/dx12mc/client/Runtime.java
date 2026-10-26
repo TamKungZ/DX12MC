@@ -6,12 +6,14 @@ import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexBuffer;
 import net.dx12mc.bridge.Slot;
 import net.dx12mc.config.Config;
+import net.dx12mc.graphics.RendererInfo;
 import net.dx12mc.render.Controller;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderType;
 import org.joml.Matrix4f;
 
 public final class Runtime implements AutoCloseable {
+  public static final int NATIVE_GPU_PROFILE = 0;
   private final Controller controller;
 
   public Runtime(Config config) {
@@ -194,6 +196,26 @@ public final class Runtime implements AutoCloseable {
 
   public boolean openGlPresentationAllowed() {
     return controller.openGlPresentationAllowed();
+  }
+
+  public void vsync(boolean enabled) {
+    controller.vsync(enabled);
+  }
+
+  public RendererInfo rendererInfo() {
+    return controller.rendererInfo();
+  }
+
+  public boolean ownsGpuTiming() {
+    return controller.ownsGpuTiming();
+  }
+
+  public long gpuFrameNanos() {
+    return controller.gpuFrameNanos();
+  }
+
+  public boolean legacyPostProcessingAvailable() {
+    return controller.legacyPostProcessingAvailable();
   }
 
   public boolean suppressVanillaFramebufferBlit() {
