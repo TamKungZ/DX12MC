@@ -71,6 +71,7 @@ val shaderSpecs = listOf(
     ShaderSpec("fs_position_color_tex", "fragment", 'F'),
     ShaderSpec("fs_position_color_tex_cutout", "fragment", 'F'),
     ShaderSpec("vs_entity", "vertex", 'V'),
+    ShaderSpec("vs_line", "vertex", 'V'),
     ShaderSpec("fs_entity", "fragment", 'F'),
     ShaderSpec("fs_entity_cutout", "fragment", 'F')
 )
@@ -232,6 +233,7 @@ val validateD3D12ShaderSources by tasks.registering {
             "fs_position_color_tex.sc" to "#include \"texture.sh\"",
             "fs_position_color_tex_cutout.sc" to "#include \"texture.sh\"",
             "vs_entity.sc" to "#include \"texture.sh\"",
+            "vs_line.sc" to "#include \"common.sh\"",
             "fs_entity.sc" to "#include \"texture.sh\"",
             "fs_entity_cutout.sc" to "#include \"texture.sh\""
         )
@@ -248,12 +250,17 @@ val validateD3D12ShaderSources by tasks.registering {
             }
         }
         for (name in listOf("vs_position_color.sc", "vs_position_color_light.sc", "vs_position_color_tex.sc",
-                "vs_position_color_tex_light.sc", "vs_entity.sc")) {
+                "vs_position_color_tex_light.sc", "vs_entity.sc", "vs_line.sc")) {
             requireAll(name, listOf("uniform mat4 u_fogModel;", "dx12mcFogDistance(mul(u_fogModel, clip).xyz"))
         }
         for (name in listOf("vs_position_color_light.sc", "vs_position_color_tex_light.sc", "vs_entity.sc")) {
             requireAll(name, listOf("SAMPLER2D(s_lightmap, 2)", "dx12mcLightmapUv(a_texcoord2, u_lightParams.x)"))
         }
+        requireAll("vs_line.sc", listOf(
+            "uniform vec4 u_lineParams;",
+            "vec2(-screenDirection.y, screenDirection.x) * u_lineParams.x / u_lineParams.yz",
+            "if (lineOffset.x < 0.0) lineOffset *= -1.0;",
+            "lineOffset * a_texcoord0.x"))
         requireAll("vs_entity.sc", listOf(
             "SAMPLER2D(s_overlay, 1)", "dx12mcMixLight(u_lightDir0.xyz, u_lightDir1.xyz, normal, a_color0)"))
         val fragments = listOf(
