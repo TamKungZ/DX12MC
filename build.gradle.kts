@@ -66,6 +66,8 @@ val shaderSpecs = listOf(
     ShaderSpec("vs_position_color_light", "vertex", 'V'),
     ShaderSpec("fs_position_color", "fragment", 'F'),
     ShaderSpec("fs_position_color_alpha", "fragment", 'F'),
+    ShaderSpec("fs_logic_invert", "fragment", 'F'),
+    ShaderSpec("fs_logic_invert_alpha", "fragment", 'F'),
     ShaderSpec("vs_position_color_tex", "vertex", 'V'),
     ShaderSpec("vs_position_color_tex_light", "vertex", 'V'),
     ShaderSpec("fs_position_color_tex", "fragment", 'F'),
@@ -228,6 +230,8 @@ val validateD3D12ShaderSources by tasks.registering {
             "vs_position_color_light.sc" to "#include \"texture.sh\"",
             "fs_position_color.sc" to "#include \"common.sh\"",
             "fs_position_color_alpha.sc" to "#include \"common.sh\"",
+            "fs_logic_invert.sc" to "#include \"common.sh\"",
+            "fs_logic_invert_alpha.sc" to "#include \"common.sh\"",
             "vs_position_color_tex.sc" to "#include \"common.sh\"",
             "vs_position_color_tex_light.sc" to "#include \"texture.sh\"",
             "fs_position_color_tex.sc" to "#include \"texture.sh\"",
@@ -275,6 +279,13 @@ val validateD3D12ShaderSources by tasks.registering {
             }
             if (alphaVariant) requireAll(name, listOf("uniform vec4 u_material;", "< u_material.x) discard;"))
         }
+        requireAll("fs_logic_invert.sc", listOf("\$input v_color0, v_fog", "gl_FragColor = vec4_splat(1.0);"))
+        if (shaderSourceDir.file("fs_logic_invert.sc").asFile.readText().contains("discard")) {
+            throw GradleException("fs_logic_invert.sc: only alpha-test variants may discard")
+        }
+        requireAll("fs_logic_invert_alpha.sc", listOf(
+            "\$input v_color0, v_fog", "uniform vec4 u_material;", "< u_material.x) discard;",
+            "gl_FragColor = vec4_splat(1.0);"))
         for (name in listOf("fs_position_color_tex.sc", "fs_position_color_tex_cutout.sc", "fs_entity.sc", "fs_entity_cutout.sc")) {
             requireAll(name, listOf("SAMPLER2D(s_texColor, 0)", "dx12mcTexture2DMaxLod(s_texColor, v_texcoord0, u_texLod.x)"))
         }
