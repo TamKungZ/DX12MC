@@ -153,6 +153,11 @@ final class RendererLifecycle implements AutoCloseable {
     return state == State.CLOSED;
   }
 
+  void clear(Minecraft minecraft, int mask, int rgba, float depth) {
+    ensureFrame(minecraft);
+    backend.clear(mask, rgba, depth);
+  }
+
   void vsync(boolean enabled) {
     backend.vsync(enabled);
   }
