@@ -26,6 +26,10 @@ final class Pixels {
       writeAbgrAsRgba(target, offset, image.getPixelRGBA(x, y));
       return;
     }
+    if (format == NativeImage.Format.LUMINANCE) {
+      writeRedTexel(target, offset, image.getRedOrLuminance(x, y));
+      return;
+    }
     int r = Byte.toUnsignedInt(image.getRedOrLuminance(x, y));
     int g = format.hasGreen() ? Byte.toUnsignedInt(image.getGreenOrLuminance(x, y)) : r;
     int b = format.hasBlue() ? Byte.toUnsignedInt(image.getBlueOrLuminance(x, y)) : r;
@@ -34,5 +38,12 @@ final class Pixels {
     target[offset + 1] = (byte) g;
     target[offset + 2] = (byte) b;
     target[offset + 3] = (byte) a;
+  }
+
+  static void writeRedTexel(byte[] target, int offset, byte red) {
+    target[offset] = red;
+    target[offset + 1] = 0;
+    target[offset + 2] = 0;
+    target[offset + 3] = (byte) 0xFF;
   }
 }
