@@ -21,7 +21,9 @@
     "FrameProfileInvoker",
     "OptionsMixin",
     "OptionInstanceMixin",
-    "PostChainMixin"
+    "PostChainMixin",
+    "ScreenshotInvoker",
+    "GameRendererInvoker"
   ],
   "injectors": {
     "defaultRequire": 1
