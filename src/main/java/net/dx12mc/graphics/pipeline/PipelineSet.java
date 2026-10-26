@@ -136,7 +136,14 @@ public final class PipelineSet implements AutoCloseable {
   private void create(
       DrawContext.Kind kind, Layout layout, String vertex, String fragment, String alphaTest) {
     pipelines[kind.ordinal()] =
-        new ShaderPipeline(kind, layout, uniforms, vertex, fragment, alphaTest);
+        new ShaderPipeline(
+            kind,
+            layout,
+            uniforms,
+            vertex,
+            fragment,
+            alphaTest,
+            fragment.equals("fs_position_color"));
   }
 
   private ShaderPipeline pipeline(DrawContext context, boolean persistent) {
