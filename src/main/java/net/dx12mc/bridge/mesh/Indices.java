@@ -33,10 +33,18 @@ final class Indices {
     if (mode == null || vertexCount <= 0) return 0;
     return switch (mode) {
       case TRIANGLES -> vertexCount - vertexCount % 3;
-      case QUADS -> vertexCount / 4 * 6;
-      case TRIANGLE_STRIP, TRIANGLE_FAN -> vertexCount < 3 ? 0 : (vertexCount - 2) * 3;
-      case LINES, LINE_STRIP, DEBUG_LINES, DEBUG_LINE_STRIP -> 0;
+      case QUADS, LINES -> vertexCount / 4 * 6;
+      case TRIANGLE_STRIP, TRIANGLE_FAN, LINE_STRIP -> vertexCount < 3 ? 0 : (vertexCount - 2) * 3;
+      case DEBUG_LINES -> vertexCount - vertexCount % 2;
+      case DEBUG_LINE_STRIP -> vertexCount < 2 ? 0 : vertexCount;
     };
+  }
+
+  static boolean completePrimitives(VertexFormat.Mode mode, int indexCount) {
+    if (indexCount <= 0) return false;
+    if (mode == VertexFormat.Mode.DEBUG_LINES) return indexCount % 2 == 0;
+    if (mode == VertexFormat.Mode.DEBUG_LINE_STRIP) return indexCount >= 2;
+    return indexCount % 3 == 0;
   }
 
   static void writeTriangles(VertexFormat.Mode mode, int vertexCount, int[] out) {
@@ -60,7 +68,19 @@ final class Indices {
           out[i + 5] = v;
         }
       }
-      case TRIANGLE_STRIP -> {
+      case LINES -> {
+        for (int line = 0; line < vertexCount / 4; line++) {
+          int v = line * 4;
+          int i = line * 6;
+          out[i] = v;
+          out[i + 1] = v + 1;
+          out[i + 2] = v + 2;
+          out[i + 3] = v + 3;
+          out[i + 4] = v + 2;
+          out[i + 5] = v + 1;
+        }
+      }
+      case TRIANGLE_STRIP, LINE_STRIP -> {
         for (int triangle = 0; triangle < vertexCount - 2; triangle++) {
           int i = triangle * 3;
           if ((triangle & 1) == 0) {
@@ -81,8 +101,9 @@ final class Indices {
           out[i + 2] = triangle + 2;
         }
       }
-      case LINES, LINE_STRIP, DEBUG_LINES, DEBUG_LINE_STRIP ->
-          throw new IllegalArgumentException("line modes cannot be converted here");
+      case DEBUG_LINES, DEBUG_LINE_STRIP -> {
+        for (int i = 0; i < required; i++) out[i] = i;
+      }
     }
   }
 }
