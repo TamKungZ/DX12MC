@@ -43,14 +43,11 @@ public final class Encoder {
     int colorOffset = hasColor ? format.getOffset(VertexFormatElement.COLOR) : -1;
     boolean hasUv0 = valid(format, VertexFormatElement.UV0, Float.BYTES * 2, stride);
     int uv0Offset = hasUv0 ? format.getOffset(VertexFormatElement.UV0) : -1;
-    boolean retainExtendedAttributes = scratch == null;
-    boolean hasUv1 =
-        retainExtendedAttributes && valid(format, VertexFormatElement.UV1, Short.BYTES * 2, stride);
+    boolean hasUv1 = valid(format, VertexFormatElement.UV1, Short.BYTES * 2, stride);
     int uv1Offset = hasUv1 ? format.getOffset(VertexFormatElement.UV1) : -1;
     boolean hasUv2 = valid(format, VertexFormatElement.UV2, Short.BYTES * 2, stride);
     int uv2Offset = hasUv2 ? format.getOffset(VertexFormatElement.UV2) : -1;
-    boolean hasNormal =
-        retainExtendedAttributes && valid(format, VertexFormatElement.NORMAL, 3, stride);
+    boolean hasNormal = valid(format, VertexFormatElement.NORMAL, 3, stride);
     int normalOffset = hasNormal ? format.getOffset(VertexFormatElement.NORMAL) : -1;
     float[] uv0 =
         hasUv0 ? (scratch == null ? new float[uvCount] : scratch.uv0(uvCount)) : EMPTY_FLOATS;
