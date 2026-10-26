@@ -4,6 +4,13 @@ Note: 0.9.0 is the version that fixes the low FPS problem. On a GT1030 it perfor
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
+## 0.11.0 - Smaller vertices and release publishing
+
+- Store vertex light coordinates (UV2) as 16-bit integers instead of 32-bit floats. Terrain, GUI and other non-entity vertices shrink from 32 to 28 bytes, and entity and line vertices from 44 to 40 bytes. The shaders read the same unsigned values as before, so the rendered output does not change. In the new `renderBench` frame scenario on a GT 1030, GPU frame time went from 3.36 ms to 3.30 ms. This is a benchmark result, not an in-game measurement.
+- Add a `renderBench` frame scenario (`-PbenchArgs=frame`) shaped like a render-distance-12 frame: about 1.8 million terrain vertices in region pages, sky, entities, water, particles, clouds, the hand and the GUI behind their depth clears. `profile` reports GPU time per pass, `f3` adds debug-screen text, and `capture=<name>` saves the frame to `build/frame-bench/` for exact image comparisons.
+- Select the signing key by fingerprint instead of e-mail address.
+- Publish releases from a version tag: the workflow builds and tests the tagged commit, publishes the signed jar, sources jar, javadoc jar and POM to GitHub Packages, and creates the GitHub release with notes taken from this changelog. No files are attached to the release.
+
 ## 0.10.0 - Rendering fidelity
 
 - Translate Minecraft's mid-frame OpenGL clears to Direct3D 12. Each clear starts a new bgfx view, so the depth clears before the first-person hand and before the GUI take effect, and the level is cleared to the fog colour Minecraft sets.
