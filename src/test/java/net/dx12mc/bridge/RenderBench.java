@@ -1,5 +1,6 @@
 package net.dx12mc.bridge;
 
+import static org.lwjgl.bgfx.BGFX.*;
 import static org.lwjgl.system.MemoryUtil.NULL;
 import static org.lwjgl.system.MemoryUtil.memUTF16;
 
@@ -36,21 +37,33 @@ public final class RenderBench {
     System.out.println("renderer=" + backend.rendererName());
     PipelineSet pipelines = new PipelineSet();
     pipelines.start();
-    Texture atlas = Texture.create(1024, 1024, 4, false, false, true);
+    Texture atlas = Texture.create(1024, 1024, 4);
+    atlas.sampler(BGFX_SAMPLER_MIN_POINT | BGFX_SAMPLER_MAG_POINT, 4.0f);
     byte[] pixels = new byte[1024 * 1024 * 4];
     new Random(1).nextBytes(pixels);
-    atlas.update(0, 0, 0, 1024, 1024, pixels, false, false, true);
-    Texture light = Texture.create(16, 16, 0, true, true, false);
-    light.update(0, 0, 0, 16, 16, new byte[16 * 16 * 4], true, true, false);
+    atlas.update(0, 0, 0, 1024, 1024, pixels);
+    Texture light = Texture.create(16, 16, 0);
+    light.sampler(BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP, 0.0f);
+    light.update(0, 0, 0, 16, 16, new byte[16 * 16 * 4]);
     RenderState renderState = new RenderState();
     renderState.cull(true);
     DrawContext context =
-        new DrawContext().set(true, atlas, true, light, false, renderState.snapshot(WIDTH, HEIGHT));
+        terrainContext(
+            new DrawContext()
+                .set(
+                    DrawContext.Kind.TEXTURE_LIGHT,
+                    atlas,
+                    light,
+                    null,
+                    false,
+                    renderState.snapshot(WIDTH, HEIGHT)));
 
     String filter = args.length > 0 ? args[0] : "";
     if (filter.equals("verify")) {
       verify(backend, pipelines, context);
       exhaustTransient(backend, pipelines, context);
+      int failures = PixelCheck.run(backend, pipelines);
+      System.out.println("pixel checks failed: " + failures);
       pipelines.close();
       atlas.close();
       light.close();
@@ -174,15 +187,12 @@ public final class RenderBench {
     List<Mesh> pending = new ArrayList<>();
     Batch rebuildBatch = rebuildsPerFrame > 0 ? grid(random, 8000) : null;
     byte[] tile = new byte[updateWidth * updateHeight * 4];
-    float[] matrix = new float[16];
-    float[] texMatrix = new float[16];
-    float[] tint = {1, 1, 1, 1};
+    float[] matrix = context.matrix();
     Matrix4f projection =
         new Matrix4f().perspective((float) Math.toRadians(70), WIDTH / (float) HEIGHT, 0.05f, 400f);
     Matrix4f view = new Matrix4f();
     Matrix4f clip = new Matrix4f();
     Matrix4f depth = new Matrix4f();
-    new Matrix4f().identity().get(texMatrix);
     double cpu = 0;
     double gpu = 0;
     double waitSubmit = 0;
@@ -195,14 +205,14 @@ public final class RenderBench {
       for (int d = 0; d < draws; d++) {
         clip.set(projection).mul(view).translate((d % 40) * 2f, 0f, -(d / 40) * 2f);
         depth.identity().m22(0.5f).m32(0.5f).mul(clip).get(matrix);
-        boolean ok = pipelines.submitSection(meshes.get(d), context, matrix, texMatrix, tint);
+        boolean ok = pipelines.submitSection(meshes.get(d), context);
         if (!ok) throw new IllegalStateException("submit rejected");
       }
       pipelines.endSectionLayer();
       for (int t = 0; t < transientDraws; t++) {
         clip.set(projection).mul(view).translate((t % 40) * 0.5f, 1f, -(t / 40) * 0.5f);
         depth.identity().m22(0.5f).m32(0.5f).mul(clip).get(matrix);
-        if (!pipelines.submit(smallBatch, context, matrix, texMatrix, tint)) {
+        if (!pipelines.submit(smallBatch, context)) {
           throw new IllegalStateException("transient submit rejected");
         }
       }
@@ -217,16 +227,7 @@ public final class RenderBench {
         }
       }
       for (int u = 0; u < updatesPerFrame; u++) {
-        atlas.update(
-            0,
-            0,
-            (u * 16) % (1024 - updateHeight + 1),
-            updateWidth,
-            updateHeight,
-            tile,
-            false,
-            false,
-            true);
+        atlas.update(0, 0, (u * 16) % (1024 - updateHeight + 1), updateWidth, updateHeight, tile);
       }
       if (animation != null && frame % 3 == 0) {
         for (net.dx12mc.bridge.texture.Image.Upload upload : animation.frameUploads()) {
@@ -236,10 +237,7 @@ public final class RenderBench {
               upload.y(),
               upload.width(),
               upload.height(),
-              upload.rgba(),
-              false,
-              false,
-              true);
+              upload.rgba());
         }
       }
       backend.endFrame();
@@ -273,11 +271,7 @@ public final class RenderBench {
   }
 
   private static void verify(Backend backend, PipelineSet pipelines, DrawContext context) {
-    float[] matrix = new float[16];
-    new Matrix4f().identity().get(matrix);
-    float[] texMatrix = new float[16];
-    new Matrix4f().identity().get(texMatrix);
-    float[] tint = {1, 1, 1, 1};
+    new Matrix4f().identity().get(context.matrix());
     String[] kinds = {"SORTABLE", "POOLED", "SHARED_QUADS"};
     for (String kind : kinds) {
       for (int vertices : new int[] {4000, 70000}) {
@@ -285,10 +279,10 @@ public final class RenderBench {
         Mesh mesh = makeMesh(batch, pipelines, kind);
         backend.beginFrame(new FrameSize(WIDTH, HEIGHT));
         backend.endFrame();
-        long whole = triangles(backend, pipelines, context, mesh, matrix, texMatrix, tint);
+        long whole = triangles(backend, pipelines, context, mesh);
         int quadsFrom = batch.indexCount() / 6 / 4 * 6;
         mesh.drawRange(quadsFrom, batch.indexCount() / 6 / 2 * 6);
-        long ranged = triangles(backend, pipelines, context, mesh, matrix, texMatrix, tint);
+        long ranged = triangles(backend, pipelines, context, mesh);
         mesh.drawAll();
         System.out.printf(
             "verify %-13s vertices=%6d expected whole=%d got %d | range expected=%d got %d%n",
@@ -300,11 +294,7 @@ public final class RenderBench {
 
   private static void exhaustTransient(
       Backend backend, PipelineSet pipelines, DrawContext context) {
-    float[] matrix = new float[16];
-    new Matrix4f().identity().get(matrix);
-    float[] texMatrix = new float[16];
-    new Matrix4f().identity().get(texMatrix);
-    float[] tint = {1, 1, 1, 1};
+    new Matrix4f().identity().get(context.matrix());
     Batch big = grid(new Random(9), 4000);
     Batch small = grid(new Random(9), 4);
     backend.beginFrame(new FrameSize(WIDTH, HEIGHT));
@@ -312,7 +302,7 @@ public final class RenderBench {
         net.dx12mc.graphics.bgfx.TransientPressure.insufficient(
             pipelines.layout(), 4000, big.indexCount(), false);
     int accepted = 0;
-    while (accepted < 100_000 && pipelines.submit(big, context, matrix, texMatrix, tint)) {
+    while (accepted < 100_000 && pipelines.submit(big, context)) {
       accepted++;
     }
     boolean afterBig =
@@ -323,7 +313,7 @@ public final class RenderBench {
             pipelines.layout(), 4, small.indexCount(), false);
     backend.endFrame();
     backend.beginFrame(new FrameSize(WIDTH, HEIGHT));
-    boolean recovered = pipelines.submit(big, context, matrix, texMatrix, tint);
+    boolean recovered = pipelines.submit(big, context);
     backend.endFrame();
     System.out.printf(
         "transient exhaustion: accepted=%d (%.1f MiB vertices) insufficientBefore=%b"
@@ -332,20 +322,34 @@ public final class RenderBench {
   }
 
   private static long triangles(
-      Backend backend,
-      PipelineSet pipelines,
-      DrawContext context,
-      Mesh mesh,
-      float[] matrix,
-      float[] texMatrix,
-      float[] tint) {
+      Backend backend, PipelineSet pipelines, DrawContext context, Mesh mesh) {
     backend.beginFrame(new FrameSize(WIDTH, HEIGHT));
-    pipelines.submitSection(mesh, context, matrix, texMatrix, tint);
+    pipelines.submitSection(mesh, context);
     pipelines.endSectionLayer();
     backend.endFrame();
     backend.beginFrame(new FrameSize(WIDTH, HEIGHT));
     backend.endFrame();
     return org.lwjgl.bgfx.BGFX.bgfx_get_stats().numPrims(0);
+  }
+
+  private static DrawContext terrainContext(DrawContext context) {
+    new Matrix4f().identity().get(context.textureMatrix());
+    new Matrix4f().identity().get(context.fogModel());
+    float[] tint = context.tint();
+    tint[0] = tint[1] = tint[2] = tint[3] = 1.0f;
+    float[] fog = context.fogParams();
+    fog[0] = 160.0f;
+    fog[1] = 192.0f;
+    fog[2] = 1.0f;
+    fog[3] = 1.0f;
+    float[] fogColor = context.fogColor();
+    fogColor[0] = 0.6f;
+    fogColor[1] = 0.7f;
+    fogColor[2] = 1.0f;
+    fogColor[3] = 1.0f;
+    context.lightParams()[0] = 1.0f;
+    context.textureLod()[0] = 4.0f;
+    return context;
   }
 
   private static Mesh makeMesh(Batch batch, PipelineSet pipelines, String kind) {
