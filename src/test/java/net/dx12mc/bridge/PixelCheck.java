@@ -136,7 +136,17 @@ final class PixelCheck {
         draw(lightQuad(128), lit);
         int expected = program.equals("rendertype_solid") ? 120 : 128;
         expect(program + " lightmap at UV2=128", expected, expected, expected, read());
+        begin(0x000000FF);
+        draw(lightQuad(0xFFFF), lit);
+        expect(program + " UV2=65535 is unsigned, not -1", 240, 240, 240, read());
       }
+      begin(0x000000FF);
+      ShaderSemantics entity = ShaderSemantics.of("rendertype_entity_solid");
+      DrawContext lit = textureContext(white, entity);
+      lit.set(DrawContext.Kind.ENTITY, white, lightmap, null, false, lit.state());
+      ShaderInputs.light(entity, true, false, false, lit.lightParams());
+      draw(entityQuad(new byte[] {0, 127, 0}, (short) 0xFFFF), lit);
+      expect("entity UV2=65535 is unsigned, not -1", 240, 240, 240, read());
     } finally {
       white.close();
       lightmap.close();
@@ -505,11 +515,17 @@ final class PixelCheck {
   }
 
   private static Batch entityQuad(byte[] normal) {
+    return entityQuad(normal, (short) 0);
+  }
+
+  private static Batch entityQuad(byte[] normal, short light) {
     float[] positions = {-1, -1, 0.5f, 1, -1, 0.5f, 1, 1, 0.5f, -1, 1, 0.5f};
     float[] uv0 = {0, 0, 1, 0, 1, 1, 0, 1};
     byte[] normals = new byte[12];
     for (int vertex = 0; vertex < 4; vertex++) System.arraycopy(normal, 0, normals, vertex * 3, 3);
-    return batch(positions, 0xFFFFFFFF, uv0, new short[8], new short[8], normals);
+    short[] lightUv = new short[8];
+    java.util.Arrays.fill(lightUv, light);
+    return batch(positions, 0xFFFFFFFF, uv0, new short[8], lightUv, normals);
   }
 
   private static Batch batch(
