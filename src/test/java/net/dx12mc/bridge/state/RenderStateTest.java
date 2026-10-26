@@ -119,6 +119,47 @@ class RenderStateTest {
   }
 
   @Test
+  void textHighlightOrReverseBecomesMaskThenInvertBlendPasses() {
+    RenderState state = new RenderState();
+    state.depthTest(false);
+    state.blend(true);
+    state.blendFuncSeparate(0x0302, 0x0303, 0x0001, 0x0303);
+    RenderState.Snapshot plain = state.snapshot(1920, 1080);
+    assertEquals(0L, plain.logicInvertState());
+    state.colorLogic(true);
+    state.logicOp(0x150B);
+    RenderState.Snapshot logic = state.snapshot(1920, 1080);
+    assertNotSame(plain, logic);
+    assertEquals(
+        0x06141000L,
+        logic.bgfxState() & 0x00000003FFFFF000L,
+        "dst * (1 - src) with ADD; the mirrored GL blend is ignored like GL does under a logic op");
+    assertEquals(
+        0x0181A000L, logic.logicInvertState() & 0x00000003FFFFF000L, "white * (1 - dst) with ADD");
+    assertEquals(0xFL, logic.bgfxState() & 0xFL);
+    assertEquals(0xFL, logic.logicInvertState() & 0xFL);
+    assertEquals(0L, logic.bgfxState() & 0xF0L);
+    assertEquals(0L, logic.logicInvertState() & 0xF0L);
+    state.colorLogic(false);
+    assertEquals(0L, state.snapshot(1920, 1080).logicInvertState());
+  }
+
+  @Test
+  void depthWritingLogicDrawInvertsOnlyItsOwnFragments() {
+    RenderState state = new RenderState();
+    state.depthTest(true);
+    state.depthFunc(0x0201);
+    state.depthMask(true);
+    state.colorLogic(true);
+    state.logicOp(0x150B);
+    RenderState.Snapshot logic = state.snapshot(1920, 1080);
+    assertEquals(0x10L, logic.bgfxState() & 0xF0L);
+    assertNotEquals(0L, logic.bgfxState() & 0x0000004000000000L);
+    assertEquals(0x30L, logic.logicInvertState() & 0xF0L, "EQUAL against the depth just written");
+    assertEquals(0L, logic.logicInvertState() & 0x0000004000000000L);
+  }
+
+  @Test
   void initialMirrorMatchesMinecraftPostBootstrapDepthState() {
     RenderState state = new RenderState();
     RenderState.Snapshot snapshot = state.snapshot(1920, 1080);
