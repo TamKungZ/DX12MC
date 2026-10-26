@@ -4,6 +4,7 @@ public final class RenderState {
   private static final int GL_POINT = 0x1B00;
   private static final int GL_LINE = 0x1B01;
   private static final int GL_FILL = 0x1B02;
+  private static final int GL_OR_REVERSE = 0x150B;
 
   private boolean depthTest = true;
   private int depthFunc = BgfxStateEncoder.GL_LEQUAL;
@@ -162,33 +163,51 @@ public final class RenderState {
     cachedStandardWidth = framebufferWidth;
     cachedStandardHeight = framebufferHeight;
     cachedStandard =
-        snapshot(
-            BgfxStateEncoder.standard(
-                writeR,
-                writeG,
-                writeB,
-                writeA,
+        colorLogic
+            ? snapshot(
+                BgfxStateEncoder.orReverseMask(
+                    writeR, writeG, writeB, writeA, depthTest, depthFunc, depthWrite, cull),
+                BgfxStateEncoder.orReverseInvert(
+                    writeR, writeG, writeB, writeA, depthTest, depthFunc, depthWrite, cull),
+                framebufferWidth,
+                framebufferHeight,
                 depthTest,
-                depthFunc,
+                depthWrite,
+                true,
+                cull)
+            : snapshot(
+                BgfxStateEncoder.standard(
+                    writeR,
+                    writeG,
+                    writeB,
+                    writeA,
+                    depthTest,
+                    depthFunc,
+                    depthWrite,
+                    blend,
+                    srcRgb,
+                    dstRgb,
+                    srcAlpha,
+                    dstAlpha,
+                    blendEquation,
+                    cull),
+                0L,
+                framebufferWidth,
+                framebufferHeight,
+                depthTest,
                 depthWrite,
                 blend,
-                srcRgb,
-                dstRgb,
-                srcAlpha,
-                dstAlpha,
-                blendEquation,
-                cull),
-            framebufferWidth,
-            framebufferHeight,
-            depthTest,
-            depthWrite,
-            blend,
-            cull);
+                cull);
     return cachedStandard;
   }
 
   public Snapshot skyCompatibilitySnapshot(int framebufferWidth, int framebufferHeight) {
     validateUnsupportedState();
+    if (colorLogic) {
+      throw new IllegalStateException(
+          "OpenGL color logic operation is active during a sky draw, which D3D12 does not"
+              + " translate");
+    }
     if (matches(cachedSky, cachedSkyWidth, cachedSkyHeight, framebufferWidth, framebufferHeight)) {
       return cachedSky;
     }
@@ -207,6 +226,7 @@ public final class RenderState {
                 srcAlpha,
                 dstAlpha,
                 blendEquation),
+            0L,
             framebufferWidth,
             framebufferHeight,
             false,
@@ -218,6 +238,7 @@ public final class RenderState {
 
   private Snapshot snapshot(
       long bgfxState,
+      long logicInvertState,
       int framebufferWidth,
       int framebufferHeight,
       boolean depthTest,
@@ -246,7 +267,8 @@ public final class RenderState {
         depthWrite,
         blend,
         cull,
-        depthBias());
+        depthBias(),
+        logicInvertState);
   }
 
   private boolean matches(
@@ -272,7 +294,7 @@ public final class RenderState {
               + mode
               + " is active but the D3D12 primitive/raster translation is not implemented");
     }
-    if (colorLogic) {
+    if (colorLogic && logicOp != GL_OR_REVERSE) {
       throw new IllegalStateException(
           "OpenGL color logic operation is active but D3D12 translation is not implemented: op=0x"
               + Integer.toHexString(logicOp));
@@ -298,5 +320,6 @@ public final class RenderState {
       boolean depthWrite,
       boolean blend,
       boolean cull,
-      float depthBias) {}
+      float depthBias,
+      long logicInvertState) {}
 }
