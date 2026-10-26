@@ -205,7 +205,7 @@ class StabilitySourceTest {
     assertTrue(glState.contains("dx12mc$suppressLegacyState(ci)"));
     assertTrue(glState.contains("suppressLegacyOpenGlDriverWork()"));
     assertTrue(bridge.contains("renderState.snapshot(width, height)"));
-    assertTrue(pipeline.contains("bgfx_set_state(state.bgfxState(), 0)"));
+    assertTrue(pipeline.contains("bgfx_set_state(state.bgfxState() | context.primitive(), 0)"));
     assertTrue(pipeline.contains("bgfx_set_scissor"));
     assertFalse(pipeline.contains("State.DEFAULT"));
     assertFalse(bridge.contains("immediateCompatibilitySnapshot"));
@@ -281,7 +281,8 @@ class StabilitySourceTest {
         read("bridge/state/RenderState.java") + read("bridge/state/BgfxStateEncoder.java");
     String config = read("config/Config.java");
     String scene = read("debug/Scene.java") + read("debug/NativeOverlayRenderer.java");
-    assertTrue(bridge.contains("mvpScratch.set(projection).mul(modelView)"));
+    assertTrue(bridge.contains("mvpScratch.set(projection);"));
+    assertTrue(bridge.contains("mvpScratch.mul(modelView);"));
     assertTrue(bridge.contains("private final DrawContext context = new DrawContext()"));
     assertTrue(bridge.contains("ResidentMesh resident = residents.get(slot)"));
     assertTrue(bridge.contains("resident.lastUsedFrame = frameBoundary"));
@@ -355,37 +356,35 @@ class StabilitySourceTest {
   }
 
   @Test
-  void automaticWorldIconReadbackIsStoppedAtTheGameRendererSemanticSource() throws IOException {
+  void automaticWorldIconIsCapturedFromTheD3D12Backbuffer() throws IOException {
     String gameRenderer = read("mixin/GameRendererMixin.java");
-    String runtime = read("client/Runtime.java");
     String controller = read("render/Controller.java");
     String glState = read("mixin/GlStateManagerMixin.java");
-    String scene = read("debug/Scene.java") + read("debug/NativeOverlayRenderer.java");
-    assertTrue(gameRenderer.contains("tryTakeScreenshotIfNeeded()V"));
-    assertTrue(gameRenderer.contains("suppressAutomaticWorldIconCapture()"));
-    assertTrue(gameRenderer.contains("ci.cancel()"));
-    assertTrue(runtime.contains("suppressAutomaticWorldIconCapture"));
-    assertTrue(controller.contains("public boolean suppressAutomaticWorldIconCapture()"));
-    assertTrue(controller.contains("stats.suppressedAutomaticWorldIconCapture()"));
-    assertTrue(scene.contains("Automatic world-icon GL readbacks suppressed"));
+    assertTrue(gameRenderer.contains("takeAutoScreenshot(Ljava/nio/file/Path;)V"));
+    assertTrue(gameRenderer.contains("Screenshot;takeScreenshot("));
+    assertTrue(gameRenderer.contains("self.dx12mc$takeAutoScreenshot(path)"));
+    assertFalse(gameRenderer.contains("tryTakeScreenshotIfNeeded"));
+    assertTrue(controller.contains("lifecycle.requestScreenCapture(minecraft)"));
     assertTrue(glState.contains("_getTexImage(IIIIJ)V"));
     assertTrue(glState.contains("assertOpenGlReadbackAllowed"));
     assertTrue(controller.contains("A D3D12 readback path is not implemented yet"));
   }
 
   @Test
-  void manualScreenshotReadbackIsStoppedAtItsSemanticSourceWithoutCrashing() throws IOException {
+  void manualScreenshotReadsTheD3D12BackbufferThroughVanillaGrab() throws IOException {
     String screenshot = read("mixin/ScreenshotMixin.java");
-    String runtime = read("client/Runtime.java");
     String controller = read("render/Controller.java");
     String mixins = Files.readString(Path.of("src", "main", "resources", "dx12mc.mixins.json"));
     assertTrue(screenshot.contains("@Mixin(Screenshot.class)"));
-    assertTrue(screenshot.contains("suppressManualScreenshotCapture()"));
-    assertTrue(screenshot.contains("ci.cancel()"));
-    assertTrue(screenshot.contains("Win+Shift+S"));
-    assertTrue(runtime.contains("suppressManualScreenshotCapture"));
-    assertTrue(controller.contains("public boolean suppressManualScreenshotCapture()"));
+    assertTrue(
+        screenshot.contains(
+            "ScreenshotInvoker.dx12mc$grab(gameDirectory, name, renderTarget, messages)"));
+    assertTrue(screenshot.contains("DX12MC.runtime().takeCapturedScreenshot()"));
+    assertFalse(screenshot.contains("Win+Shift+S"));
+    assertTrue(controller.contains("backend.requestScreenCapture()"));
+    assertTrue(controller.contains("ScreenImages.toNativeImage(frame)"));
     assertTrue(mixins.contains("ScreenshotMixin"));
+    assertTrue(mixins.contains("ScreenshotInvoker"));
   }
 
   @Test
@@ -398,11 +397,8 @@ class StabilitySourceTest {
     assertTrue(state.contains("if (blend)"));
     assertTrue(state.contains("blendBits(srcRgb, dstRgb, srcAlpha, dstAlpha)"));
     assertFalse(state.contains("IMMEDIATE_COMPAT_ALPHA_BLEND"));
-    assertTrue(bridge.contains("isOmittableNativeLine"));
-    assertTrue(bridge.contains("rendertype_lines"));
-    assertTrue(bridge.contains("omittedNativeLineOverlay"));
-    assertTrue(stats.contains("omittedNativeLineOverlayTotal"));
-    assertTrue(scene.contains("Native thick-line overlays omitted"));
+    assertFalse(bridge.contains("isOmittableNativeLine"));
+    assertFalse(bridge.contains("omittedNativeLineOverlay"));
   }
 
   private static String read(String relative) throws IOException {
