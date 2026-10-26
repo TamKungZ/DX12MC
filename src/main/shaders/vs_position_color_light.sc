@@ -12,6 +12,6 @@ void main()
     vec4 clip = mul(u_mvp, vec4(a_position, 1.0));
     gl_Position = clip;
     v_fog = dx12mcFogDistance(mul(u_fogModel, clip).xyz, u_fogParams.z);
-    vec2 lightUv = dx12mcLightmapUv(a_texcoord2, u_lightParams.x);
+    vec2 lightUv = dx12mcLightmapUv(dx12mcUnsigned16(a_texcoord2), u_lightParams.x);
     v_color0 = a_color0 * dx12mcTexture2DLevel(s_lightmap, lightUv, 0.0);
 }

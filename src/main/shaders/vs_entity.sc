@@ -22,7 +22,7 @@ void main()
     v_color0 = a_color0;
     if (u_lightParams.z > 0.5) v_color0 = dx12mcMixLight(u_lightDir0.xyz, u_lightDir1.xyz, normal, a_color0);
     v_light = vec4_splat(1.0);
-    if (u_lightParams.x > 0.5) v_light = dx12mcTexture2DLevel(s_lightmap, dx12mcLightmapUv(a_texcoord2, u_lightParams.x), 0.0);
+    if (u_lightParams.x > 0.5) v_light = dx12mcTexture2DLevel(s_lightmap, dx12mcLightmapUv(dx12mcUnsigned16(a_texcoord2), u_lightParams.x), 0.0);
     v_overlay = vec4_splat(1.0);
     if (u_lightParams.y > 0.5) v_overlay = dx12mcTexture2DLevel(s_overlay, (a_texcoord1 + vec2_splat(0.5)) / 16.0, 0.0);
 }

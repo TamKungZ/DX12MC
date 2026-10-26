@@ -36,6 +36,11 @@ vec4 dx12mcMixLight(vec3 _lightDir0, vec3 _lightDir1, vec3 _normal, vec4 _color)
     return vec4(_color.rgb * lightAccum, _color.a);
 }
 
+vec2 dx12mcUnsigned16(ivec2 _value)
+{
+    return vec2(_value & ivec2(0xFFFF, 0xFFFF));
+}
+
 vec2 dx12mcLightmapUv(vec2 _uv2, float _mode)
 {
     if (_mode < 1.5) return clamp(_uv2 / 256.0, vec2_splat(0.5 / 16.0), vec2_splat(15.5 / 16.0));
