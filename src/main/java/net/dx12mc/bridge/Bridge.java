@@ -3,7 +3,6 @@ package net.dx12mc.bridge;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexBuffer;
-import com.mojang.blaze3d.vertex.VertexFormat;
 import java.nio.ByteBuffer;
 import net.dx12mc.bridge.mesh.Batch;
 import net.dx12mc.bridge.mesh.Encoder;
@@ -366,10 +365,6 @@ public final class Bridge implements AutoCloseable {
     if (mesh == null) throw unsupported("BufferUploader supplied null MeshData");
     MeshData.DrawState drawState = mesh.drawState();
     String activeShader = DrawContextFactory.shaderName();
-    if (isOmittableNativeLine(drawState, activeShader)) {
-      stats.omittedNativeLineOverlay();
-      return true;
-    }
     Batch batch = Encoder.encodeReusable(mesh, immediateScratch);
     stats.immediateCaptured(batch);
     if (batch == null) {
@@ -532,14 +527,6 @@ public final class Bridge implements AutoCloseable {
     if (!pipelines.started()) {
       throw unsupported("D3D12 bridge draw attempted before native pipeline initialization");
     }
-  }
-
-  private static boolean isOmittableNativeLine(MeshData.DrawState state, String shader) {
-    if (state == null || shader == null) return false;
-    VertexFormat.Mode mode = state.mode();
-    boolean thickLineMode =
-        mode == VertexFormat.Mode.LINES || mode == VertexFormat.Mode.DEBUG_LINES;
-    return thickLineMode && shader.toLowerCase(java.util.Locale.ROOT).contains("rendertype_lines");
   }
 
   private static String describe(MeshData.DrawState state) {
