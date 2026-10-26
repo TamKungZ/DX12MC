@@ -49,6 +49,12 @@ public final class PipelineSet implements AutoCloseable {
           "fs_position_color_tex",
           "fs_position_color_tex_cutout");
       create(DrawContext.Kind.ENTITY, entityLayout, "vs_entity", "fs_entity", "fs_entity_cutout");
+      create(
+          DrawContext.Kind.LINE,
+          entityLayout,
+          "vs_line",
+          "fs_position_color",
+          "fs_position_color_alpha");
     } catch (Throwable throwable) {
       close();
       throw throwable;
