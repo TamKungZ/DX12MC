@@ -212,6 +212,17 @@ public final class Image {
     return true;
   }
 
+  public boolean setMaxLevel(int requestedMaxLevel) {
+    int target = Math.min(Math.max(0, requestedMaxLevel), maximumMipLevel(width, height));
+    if (target >= maxLevel) return ensureMaxLevel(target);
+    MipLevel[] truncated = new MipLevel[target + 1];
+    System.arraycopy(levels, 0, truncated, 0, truncated.length);
+    levels = truncated;
+    maxLevel = target;
+    revision++;
+    return true;
+  }
+
   public long additionalBytesForUpload(int level) {
     if (level < 0) throw new IllegalArgumentException("invalid mip level: " + level);
     ensureMaxLevel(level);
