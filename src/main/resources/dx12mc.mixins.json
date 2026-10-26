@@ -13,7 +13,14 @@
     "RenderSystemMixin",
     "BufferUploaderMixin",
     "RenderTargetMixin",
-    "ScreenshotMixin"
+    "ScreenshotMixin",
+    "RenderSystemAccessor",
+    "GlUtilMixin",
+    "TimerQueryMixin",
+    "FrameProfileMixin",
+    "FrameProfileInvoker",
+    "OptionsMixin",
+    "OptionInstanceMixin"
   ],
   "injectors": {
     "defaultRequire": 1
