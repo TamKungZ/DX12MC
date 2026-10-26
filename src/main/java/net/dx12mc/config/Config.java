@@ -1,12 +1,11 @@
 package net.dx12mc.config;
 
-public record Config(Mode mode, boolean vsync, int clearColorRgba, boolean overlay) {
+public record Config(Mode mode, int clearColorRgba, boolean overlay) {
   private static final int DEFAULT_CLEAR = 0x18202AFF;
 
   public static Config load() {
     return new Config(
         Mode.parse(System.getProperty("dx12mc.mode", "native")),
-        Boolean.parseBoolean(System.getProperty("dx12mc.vsync", "false")),
         parseRgba(System.getProperty("dx12mc.clear", "18202AFF")),
         Boolean.parseBoolean(System.getProperty("dx12mc.overlay", "false")));
   }
@@ -24,6 +23,10 @@ public record Config(Mode mode, boolean vsync, int clearColorRgba, boolean overl
   }
 
   public boolean openGlPresentationAllowed() {
+    return probeMode();
+  }
+
+  public boolean legacyPostProcessingAvailable() {
     return probeMode();
   }
 
