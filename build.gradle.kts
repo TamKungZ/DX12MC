@@ -344,11 +344,9 @@ loom {
         named("client") {
             client()
             val mode = providers.systemProperty("dx12mc.mode").orElse(prop("run_mode"))
-            val vsync = providers.systemProperty("dx12mc.vsync").orElse(prop("run_vsync"))
             val clear = providers.systemProperty("dx12mc.clear").orElse(prop("run_clear"))
             val overlay = providers.systemProperty("dx12mc.overlay").orElse(prop("run_overlay"))
             vmArg("-Ddx12mc.mode=${mode.get()}")
-            vmArg("-Ddx12mc.vsync=${vsync.get()}")
             vmArg("-Ddx12mc.clear=${clear.get()}")
             vmArg("-Ddx12mc.overlay=${overlay.get()}")
         }
