@@ -14,15 +14,11 @@ class RenderStateTest {
     assertSame(standard, state.snapshot(1920, 1080));
     assertNotSame(standard, state.snapshot(1280, 720));
 
-    RenderState.Snapshot immediate = state.immediateCompatibilitySnapshot(1280, 720);
-    assertSame(immediate, state.immediateCompatibilitySnapshot(1280, 720));
-
     RenderState.Snapshot sky = state.skyCompatibilitySnapshot(1280, 720);
     assertSame(sky, state.skyCompatibilitySnapshot(1280, 720));
 
     state.blend(true);
     assertNotSame(standard, state.snapshot(1920, 1080));
-    assertNotSame(immediate, state.immediateCompatibilitySnapshot(1280, 720));
     assertNotSame(sky, state.skyCompatibilitySnapshot(1280, 720));
   }
 
@@ -135,51 +131,56 @@ class RenderStateTest {
   }
 
   @Test
-  void immediateCompatibilityStateMatchesKnownGood0512Pipeline() {
+  void guiOverlayWithoutDepthTestNeitherTestsNorWritesDepth() {
     RenderState state = new RenderState();
     state.depthTest(false);
     state.depthMask(false);
-    state.blend(false);
-    state.cull(true);
-    state.colorMask(false, false, false, false);
-    long bits = state.immediateCompatibilitySnapshot(1920, 1080).bgfxState();
-    assertEquals(0xFL, bits & 0xFL);
-    assertEquals(0x20L, bits & 0xF0L);
-    assertNotEquals(0L, bits & 0x0000004000000000L);
-    assertEquals(0x06565000L, bits & 0x000000000FFFF000L);
-    assertEquals(0L, bits & 0x0000003000000000L);
+    long bits = state.snapshot(1920, 1080).bgfxState();
+    assertEquals(0L, bits & 0xF0L, "RenderType.guiOverlay uses NO_DEPTH_TEST");
+    assertEquals(0L, bits & 0x0000004000000000L);
   }
 
   @Test
-  void immediateCompatibilityStillHonorsScissor() {
+  void disabledBlendIsNotReplacedByAlphaBlending() {
+    RenderState state = new RenderState();
+    state.blend(false);
+    state.blendFunc(0x0302, 0x0303);
+    assertEquals(0L, state.snapshot(1920, 1080).bgfxState() & 0x00000003FFFFF000L);
+  }
+
+  @Test
+  void crosshairInvertBlendReachesBgfxUnchanged() {
+    RenderState state = new RenderState();
+    state.blend(true);
+    state.blendFuncSeparate(0x0307, 0x0301, 0x0001, 0x0000);
+    long blend = state.snapshot(1920, 1080).bgfxState() & 0x000000000FFFF000L;
+    assertEquals(0xA000L, blend & 0xF000L, "source rgb ONE_MINUS_DST_COLOR");
+    assertEquals(0x40000L, blend & 0xF0000L, "destination rgb ONE_MINUS_SRC_COLOR");
+    assertEquals(0x200000L, blend & 0xF00000L, "source alpha ONE");
+    assertEquals(0x1000000L, blend & 0xF000000L, "destination alpha ZERO");
+  }
+
+  @Test
+  void cullStateOfImmediateDrawsIsHonored() {
+    RenderState state = new RenderState();
+    state.cull(false);
+    assertEquals(0L, state.snapshot(1920, 1080).bgfxState() & 0x0000003000000000L);
+    state.cull(true);
+    assertNotEquals(0L, state.snapshot(1920, 1080).bgfxState() & 0x0000003000000000L);
+  }
+
+  @Test
+  void scissorIsHonored() {
     RenderState state = new RenderState();
     state.scissor(true);
     state.scissorBox(10, 20, 100, 40);
-    RenderState.Snapshot snapshot = state.immediateCompatibilitySnapshot(854, 480);
+    RenderState.Snapshot snapshot = state.snapshot(854, 480);
     assertTrue(snapshot.scissorEnabled());
     assertFalse(snapshot.scissorEmpty());
     assertEquals(10, snapshot.scissorX());
     assertEquals(420, snapshot.scissorY());
     assertEquals(100, snapshot.scissorWidth());
     assertEquals(40, snapshot.scissorHeight());
-  }
-
-  @Test
-  void immediateCompatibilityHonorsExplicitSpecialBlendModesForWorldOverlays() {
-    RenderState state = new RenderState();
-    state.blend(true);
-    state.blendFunc(0x0000, 0x0301);
-    long liveBlend = state.snapshot(1920, 1080).bgfxState() & 0x00000003FFFFF000L;
-    long immediateBlend =
-        state.immediateCompatibilitySnapshot(1920, 1080).bgfxState() & 0x00000003FFFFF000L;
-    assertEquals(
-        liveBlend,
-        immediateBlend,
-        "immediate compatibility must preserve an explicitly enabled special blend mode");
-    assertNotEquals(
-        0x0000000006565000L,
-        immediateBlend,
-        "vignette-style multiply must not be forced back to ordinary alpha blend");
   }
 
   @Test
