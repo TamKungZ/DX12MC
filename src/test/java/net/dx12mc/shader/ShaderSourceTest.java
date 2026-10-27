@@ -126,6 +126,20 @@ class ShaderSourceTest {
     }
   }
 
+  @Test
+  void entityAlphaOutputsTheRawTexelAndOnlyDiscardsAgainstVertexAlpha() throws IOException {
+    String vanilla = vanilla("core/rendertype_entity_alpha.fsh");
+    assertTrue(vanilla.contains("if (color.a < vertexColor.a) {"));
+    assertTrue(vanilla.contains("fragColor = color;"));
+    assertFalse(vanilla.contains("ColorModulator"));
+    String native_ = read("fs_position_color_tex_cutout.sc");
+    int modulate = native_.indexOf("vec4 color = base * v_color0 * u_color;");
+    int vertexAlpha = native_.indexOf("if (u_material.z > 0.5) color = base;");
+    int threshold = native_.indexOf("if (u_material.y < 0.5 && color.a < u_material.x) discard;");
+    assertTrue(modulate >= 0 && vertexAlpha > modulate && threshold > vertexAlpha);
+    assertTrue(native_.contains("base.a < (u_material.z > 0.5 ? v_color0.a : u_material.x)"));
+  }
+
   private static boolean includesHelpers(String source) {
     return source.contains("#include \"common.sh\"") || source.contains("#include \"texture.sh\"");
   }
