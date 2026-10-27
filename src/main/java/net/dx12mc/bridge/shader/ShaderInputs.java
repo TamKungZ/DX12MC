@@ -17,6 +17,13 @@ public final class ShaderInputs {
     target[3] = semantics.intensity() ? 1.0f : 0.0f;
   }
 
+  public static void portal(ShaderSemantics semantics, float gameTime, float[] target) {
+    target[0] = gameTime;
+    target[1] = semantics.endPortalLayers();
+    target[2] = 0.0f;
+    target[3] = 0.0f;
+  }
+
   public static void fog(
       ShaderSemantics semantics, float start, float end, int shapeIndex, float[] target) {
     target[0] = start;
