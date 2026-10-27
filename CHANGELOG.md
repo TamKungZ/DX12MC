@@ -9,6 +9,7 @@ Note: 0.8.8 is the first version intended to initialize git history. Earlier ver
 - Draw the end portal and the end gateway with a port of the vanilla `rendertype_end_portal` shader instead of a plain white fill. The shader layers the end sky and end portal textures with Minecraft's per-layer colours, rotation, scale and game-time scroll (15 layers for the portal, 16 for the gateway). Previously these draws had no texture coordinates, so they fell back to the plain colour program and came out solid white.
 - The End Poem screen draws its background with the same render type, so it uses the same fix.
 - Add `rendertype_end_gateway` to the vanilla shader table; before it fell back to the default entry.
+- F3, crash reports and the log now include the graphics driver version and the Direct3D feature level of the adapter bgfx opened. Both are read once at startup from DXGI and the Direct3D 12 device; NVIDIA's four-part driver number is shown in its usual form, other vendors show the raw version, and a value that cannot be read is left out.
 
 ## 0.11.0 - Smaller vertices and release publishing
 

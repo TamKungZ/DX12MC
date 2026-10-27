@@ -37,7 +37,7 @@ DX12MC hooks Minecraft at a small number of render and resource choke points:
 - `NativeImage`, `TextureUtil`, and texture-related calls for image upload data.
 - `GlStateManager`, `RenderSystem`, and `RenderTarget` where Minecraft still expects GL-shaped lifecycle or state calls, including clears, texture parameters and the bound render target.
 - `Window.updateVsync`, `Options`, and `OptionInstance` so video settings either drive the D3D12 backend or are shown as unavailable.
-- `GlUtil` and `TimerQuery` so renderer information and GPU timing describe the D3D12 adapter instead of the bootstrap OpenGL context.
+- `GlUtil` and `TimerQuery` so renderer information and GPU timing describe the D3D12 adapter instead of the bootstrap OpenGL context. The adapter's driver version and feature level are read once at startup and shared by F3, crash reports and the log.
 
 The project prefers semantic Minecraft hooks over raw OpenGL interception. Low-level GL hooks are kept narrow: they mirror state DX12MC needs or stop unsupported raw rendering from being hidden.
 
