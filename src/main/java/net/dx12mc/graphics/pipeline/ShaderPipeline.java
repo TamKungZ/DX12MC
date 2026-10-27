@@ -103,6 +103,7 @@ final class ShaderPipeline implements AutoCloseable {
 
   private boolean texturesValid(DrawContext context) {
     if (kind.textured() && !valid(context.texture())) return false;
+    if (kind == DrawContext.Kind.END_PORTAL) return valid(context.overlay());
     return kind == DrawContext.Kind.ENTITY || !kind.lightmapped() || valid(context.lightmap());
   }
 
@@ -119,7 +120,7 @@ final class ShaderPipeline implements AutoCloseable {
         Texture lightmap = valid(context.lightmap()) ? context.lightmap() : context.texture();
         bgfx_set_texture(2, uniforms.lightmap, lightmap.handle(), lightmap.samplerFlags());
       }
-      if (kind == DrawContext.Kind.ENTITY) {
+      if (kind == DrawContext.Kind.ENTITY || kind == DrawContext.Kind.END_PORTAL) {
         Texture overlay = valid(context.overlay()) ? context.overlay() : context.texture();
         bgfx_set_texture(1, uniforms.overlay, overlay.handle(), overlay.samplerFlags());
       }
