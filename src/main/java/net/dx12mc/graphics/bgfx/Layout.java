@@ -12,9 +12,17 @@ public final class Layout implements AutoCloseable {
   }
 
   private Layout(boolean entity) {
+    this(entity, false);
+  }
+
+  private Layout(boolean entity, boolean positionOnly) {
     value = BGFXVertexLayout.calloc();
     bgfx_vertex_layout_begin(value, BGFX_RENDERER_TYPE_DIRECT3D12);
     bgfx_vertex_layout_add(value, BGFX_ATTRIB_POSITION, 3, BGFX_ATTRIB_TYPE_FLOAT, false, false);
+    if (positionOnly) {
+      bgfx_vertex_layout_end(value);
+      return;
+    }
     bgfx_vertex_layout_add(value, BGFX_ATTRIB_COLOR0, 4, BGFX_ATTRIB_TYPE_UINT8, true, false);
     bgfx_vertex_layout_add(value, BGFX_ATTRIB_TEXCOORD0, 2, BGFX_ATTRIB_TYPE_FLOAT, false, false);
     if (entity) {
@@ -25,6 +33,10 @@ public final class Layout implements AutoCloseable {
       bgfx_vertex_layout_add(value, BGFX_ATTRIB_NORMAL, 4, BGFX_ATTRIB_TYPE_UINT8, true, false);
     }
     bgfx_vertex_layout_end(value);
+  }
+
+  public static Layout position() {
+    return new Layout(false, true);
   }
 
   public static Layout entity() {
