@@ -85,8 +85,20 @@ class ShaderSourceTest {
     assertTrue(common.contains("lerp(_color.rgb, _fogColor.rgb, fogValue * _fogColor.a)"));
     assertTrue(vanilla.contains("smoothstep(fogEnd, fogStart, vertexDistance)"));
     assertTrue(common.contains("smoothstep(_params.y, _params.x, _distance)"));
-    assertTrue(vanilla.contains("float distXZ = length(pos.xz);"));
-    assertTrue(common.contains("max(length(_pos.xz), abs(_pos.y))"));
+    assertTrue(vanilla.contains("float fog_distance(mat4 modelViewMat, vec3 pos, int shape) {"));
+    assertTrue(vanilla.contains("return length((modelViewMat * vec4(pos, 1.0)).xyz);"));
+    assertTrue(
+        vanilla.contains(
+            "float distXZ = length((modelViewMat * vec4(pos.x, 0.0, pos.z, 1.0)).xyz);"));
+    assertTrue(
+        vanilla.contains("float distY = length((modelViewMat * vec4(0.0, pos.y, 0.0, 1.0)).xyz);"));
+    assertTrue(vanilla.contains("return max(distXZ, distY);"));
+    assertTrue(common.contains("return length(mul(_view, vec4(_pos, 1.0)).xyz);"));
+    assertTrue(
+        common.contains("float distXZ = length(mul(_view, vec4(_pos.x, 0.0, _pos.z, 1.0)).xyz);"));
+    assertTrue(
+        common.contains("float distY = length(mul(_view, vec4(0.0, _pos.y, 0.0, 1.0)).xyz);"));
+    assertTrue(common.contains("return max(distXZ, distY);"));
   }
 
   @Test

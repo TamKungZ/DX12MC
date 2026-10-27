@@ -13,10 +13,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import net.minecraft.client.Options;
 import org.junit.jupiter.api.Test;
+import org.objectweb.asm.tree.MethodNode;
 
 class EndPortalOriginTest {
   private static final Path JAVA = Path.of("src", "main", "java", "net", "dx12mc");
@@ -25,19 +27,13 @@ class EndPortalOriginTest {
   private static final String SHADER_INSTANCE = "net/minecraft/client/renderer/ShaderInstance";
 
   @Test
-  void endPortalPoemBackgroundAndBothPortalRenderersDrawTheEndPortalRenderTypes() {
-    assertTrue(
-        invokes(
-            method("net/minecraft/client/gui/screens/WinScreen", "renderBackground", null),
-            "net/minecraft/client/gui/GuiGraphics",
-            "fillRenderType",
-            null));
-    assertTrue(
-        invokes(
-            method("net/minecraft/client/gui/screens/WinScreen", "renderBackground", null),
-            RENDER_TYPE,
-            "endPortal",
-            null));
+  void bothPortalRenderersDrawTheEndPortalRenderTypesAndThePoemBackgroundIsAPlainBlit() {
+    MethodNode poemBackground =
+        method("net/minecraft/client/gui/screens/WinScreen", "renderBg", null);
+    assertTrue(invokes(poemBackground, "net/minecraft/client/gui/GuiGraphics", "blit", null));
+    assertFalse(invokes(poemBackground, RENDER_TYPE, "endPortal", null));
+    assertFalse(
+        invokes(poemBackground, "net/minecraft/client/gui/GuiGraphics", "fillRenderType", null));
     assertTrue(
         invokes(
             method(
@@ -68,12 +64,18 @@ class EndPortalOriginTest {
               .contains("net/minecraft/client/renderer/RenderStateShard.<clinit>"),
           getter);
     }
+    assertEquals(
+        Set.of(
+            "com/mojang/blaze3d/vertex/VertexBuffer._drawWithShader",
+            "net/minecraft/client/renderer/LevelRenderer.renderChunkLayer"),
+        withoutDescriptors(
+            callersOf("com/mojang/blaze3d/systems/RenderSystem.getShaderGameTime()F")));
     assertTrue(
-        invokes(
-            method(SHADER_INSTANCE, "setDefaultUniforms", null),
-            "com/mojang/blaze3d/systems/RenderSystem",
-            "getShaderGameTime",
-            "()F"));
+        withoutDescriptors(
+                callersOf(
+                    "com/mojang/blaze3d/vertex/BufferUploader.drawWithShader("
+                        + "Lcom/mojang/blaze3d/vertex/BufferBuilder$RenderedBuffer;)V"))
+            .contains("net/minecraft/client/renderer/RenderType.end"));
   }
 
   @Test

@@ -1,9 +1,10 @@
 package net.dx12mc.client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.mojang.serialization.Codec;
 import java.util.Arrays;
 import java.util.List;
 import net.minecraft.client.GraphicsStatus;
@@ -32,13 +33,17 @@ class VideoOptionsTest {
   }
 
   @Test
-  void onlyTheMenuBlurButtonIsDisabledAndOnlyWithoutPostProcessing() {
-    OptionInstance<Boolean> menuBlur = OptionInstance.createBoolean("test.menuBlur", true);
-    OptionInstance<Boolean> other = OptionInstance.createBoolean("test.other", true);
-    assertEquals(
-        VideoOptions.MENU_BLUR_UNAVAILABLE,
-        VideoOptions.unavailableReason(menuBlur, menuBlur, false));
-    assertNull(VideoOptions.unavailableReason(other, menuBlur, false));
-    assertNull(VideoOptions.unavailableReason(menuBlur, menuBlur, true));
+  void fabulousIsNotAValidValueOfTheFilteredGraphicsValueSet() {
+    List<GraphicsStatus> offered =
+        VideoOptions.graphicsModes(Arrays.asList(GraphicsStatus.values()), false);
+    OptionInstance.AltEnum<GraphicsStatus> values =
+        new OptionInstance.AltEnum<>(
+            offered,
+            offered,
+            () -> false,
+            (option, value) -> {},
+            Codec.INT.xmap(GraphicsStatus::byId, GraphicsStatus::getId));
+    assertTrue(values.validateValue(GraphicsStatus.FABULOUS).isEmpty());
+    assertTrue(values.validateValue(GraphicsStatus.FANCY).isPresent());
   }
 }

@@ -105,7 +105,11 @@ class ShaderSemanticsTest {
     ShaderSemantics.FogSpace space = ShaderSemantics.FogSpace.POSITION;
     if (fragment.contains("gl_FragCoord.z")) space = ShaderSemantics.FogSpace.VIEW_DEPTH;
     else if (vertex.contains("length((ModelViewMat")) space = ShaderSemantics.FogSpace.VIEW_SPHERE;
-    else if (vertex.contains("fog_distance(pos.xyz")) space = ShaderSemantics.FogSpace.VIEW;
+    else if (vertex.contains("fog_distance(ModelViewMat, IViewRotMat * Position, FogShape)")) {
+      space = ShaderSemantics.FogSpace.MODEL_VIEW_INVERSE_ROTATION;
+    } else if (vertex.contains("fog_distance(ModelViewMat, ")) {
+      space = ShaderSemantics.FogSpace.MODEL_VIEW;
+    }
     ShaderSemantics.Lightmap lightmap = ShaderSemantics.Lightmap.NONE;
     if (vertex.contains("minecraft_sample_lightmap(Sampler2, UV2)")) {
       lightmap = ShaderSemantics.Lightmap.FILTERED;

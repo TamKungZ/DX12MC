@@ -394,7 +394,7 @@ final class FrameBench {
   }
 
   private void clouds(float[] fogColor) {
-    ShaderSemantics semantics = ShaderSemantics.of("rendertype_clouds");
+    ShaderSemantics semantics = ShaderSemantics.of("position_tex_color_normal");
     RenderState state = new RenderState();
     state.cull(true);
     state.blend(true);

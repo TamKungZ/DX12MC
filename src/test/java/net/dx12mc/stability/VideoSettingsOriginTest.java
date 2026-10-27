@@ -38,6 +38,8 @@ import org.objectweb.asm.tree.MethodNode;
 class VideoSettingsOriginTest {
   private static final Path JAVA = Path.of("src", "main", "java", "net", "dx12mc");
   private static final String OPTIONS = "net/minecraft/client/Options";
+  private static final String VIDEO_SETTINGS_SCREEN =
+      "net/minecraft/client/gui/screens/VideoSettingsScreen";
   private static final String WINDOW = "com/mojang/blaze3d/platform/Window";
   private static final String LEVEL_RENDERER = "net/minecraft/client/renderer/LevelRenderer";
   private static final String MINECRAFT = "net/minecraft/client/Minecraft";
@@ -68,7 +70,7 @@ class VideoSettingsOriginTest {
         option("framerateLimit", "options.framerateLimit", WINDOW, "setFramerateLimit", "(I)V"),
         option("enableVsync", "options.vsync", WINDOW, "updateVsync", "(Z)V"),
         option("fullscreen", "options.fullscreen", WINDOW, "toggleFullScreen", "()V"),
-        option("guiScale", "options.guiScale", MINECRAFT, "resizeDisplay", "()V"),
+        noApplier("guiScale", "options.guiScale"),
         option(
             "glintStrength", "options.glintStrength", RENDER_SYSTEM, "setShaderGlintAlpha", "(D)V"),
         option("cloudStatus", "options.renderClouds", MINECRAFT, "useShaderTransparency", "()Z"),
@@ -84,8 +86,7 @@ class VideoSettingsOriginTest {
         noApplier("entityDistanceScaling", "options.entityDistanceScaling"),
         noApplier("fovEffectScale", "options.fovEffectScale"),
         noApplier("showAutosaveIndicator", "options.autosaveIndicator"),
-        noApplier("glintSpeed", "options.glintSpeed"),
-        noApplier("menuBackgroundBlurriness", "options.accessibility.menu_background_blurriness"));
+        noApplier("glintSpeed", "options.glintSpeed"));
   }
 
   @TestFactory
@@ -113,7 +114,6 @@ class VideoSettingsOriginTest {
             "showAutosaveIndicator",
             "glintSpeed",
             "glintStrength",
-            "menuBackgroundBlurriness",
             "graphicsMode")
         .map(
             accessor ->
@@ -194,9 +194,88 @@ class VideoSettingsOriginTest {
   }
 
   @Test
+  void videoSettingsScreenListsExactlyTheOptionsThisClassCovers() {
+    Set<String> listed = new TreeSet<>();
+    for (String accessor : optionAccessorsRead(method(VIDEO_SETTINGS_SCREEN, "options", null))) {
+      listed.add(accessor);
+    }
+    listed.addAll(optionAccessorsRead(method(VIDEO_SETTINGS_SCREEN, "init", "()V")));
+    assertEquals(
+        Set.of(
+            "graphicsMode",
+            "renderDistance",
+            "prioritizeChunkUpdates",
+            "simulationDistance",
+            "ambientOcclusion",
+            "framerateLimit",
+            "enableVsync",
+            "bobView",
+            "guiScale",
+            "attackIndicator",
+            "gamma",
+            "cloudStatus",
+            "fullscreen",
+            "particles",
+            "mipmapLevels",
+            "entityShadows",
+            "screenEffectScale",
+            "entityDistanceScaling",
+            "fovEffectScale",
+            "showAutosaveIndicator",
+            "glintSpeed",
+            "glintStrength",
+            "biomeBlendRadius"),
+        listed);
+  }
+
+  @Test
+  void guiScaleIsAppliedByTheVideoSettingsScreenThroughResizeDisplay() {
+    assertTrue(
+        invokes(
+            method(VIDEO_SETTINGS_SCREEN, "mouseClicked", "(DDI)Z"),
+            MINECRAFT,
+            "resizeDisplay",
+            "()V"));
+    assertTrue(
+        invokes(
+            method(VIDEO_SETTINGS_SCREEN, "mouseScrolled", "(DDD)Z"),
+            MINECRAFT,
+            "resizeDisplay",
+            "()V"));
+    Set<String> appliers = withoutDescriptors(callersOf(MINECRAFT + ".resizeDisplay()V"));
+    assertTrue(appliers.contains(VIDEO_SETTINGS_SCREEN + ".mouseClicked"));
+    assertTrue(appliers.contains(VIDEO_SETTINGS_SCREEN + ".mouseScrolled"));
+    assertFalse(
+        appliers.stream()
+            .anyMatch(caller -> caller.startsWith("net/minecraft/client/OptionInstance")),
+        "the guiScale button value callback applies nothing itself in this version");
+    MethodNode resize = method(MINECRAFT, "resizeDisplay", "()V");
+    assertTrue(invokes(resize, "com/mojang/blaze3d/pipeline/RenderTarget", "resize", "(IIZ)V"));
+    assertTrue(invokes(resize, WINDOW, "setGuiScale", "(D)V"));
+  }
+
+  @Test
+  void fabulousNeedsGlRenderTargetsSoItIsRemovedFromTheGraphicsValueSet() {
+    assertTrue(
+        invokes(
+            method(LEVEL_RENDERER, "graphicsChanged", "()V"),
+            LEVEL_RENDERER,
+            "initTransparency",
+            "()V"));
+    MethodNode init = method(LEVEL_RENDERER, "initTransparency", "()V");
+    assertTrue(invokes(init, "net/minecraft/client/renderer/PostChain", "<init>", null));
+    assertTrue(invokes(init, "net/minecraft/client/Options", "graphicsMode", null));
+    assertTrue(
+        invokes(
+            method("net/minecraft/client/OptionInstance", "set", null),
+            "net/minecraft/client/OptionInstance$ValueSet",
+            "validateValue",
+            null));
+  }
+
+  @Test
   void mipmapLevelsReachTheTextureMirrorAsTheAuthoritativeMipCount() throws IOException {
-    MethodNode removed =
-        method("net/minecraft/client/gui/screens/options/VideoSettingsScreen", "removed", "()V");
+    MethodNode removed = method(VIDEO_SETTINGS_SCREEN, "removed", "()V");
     assertTrue(invokes(removed, MINECRAFT, "updateMaxMipLevel", "(I)V"));
     assertTrue(invokes(removed, MINECRAFT, "delayTextureReload", null));
     assertTrue(
@@ -214,28 +293,11 @@ class VideoSettingsOriginTest {
   }
 
   @Test
-  void menuBlurButtonAndItsOnlyConsumerShareOnePredicate() throws IOException {
-    assertEquals(
-        Set.of("net/minecraft/client/renderer/GameRenderer.processBlurEffect(F)V"),
-        callersOf(OPTIONS + ".getMenuBackgroundBlurriness()I"));
-    String gameRenderer = read("mixin/GameRendererMixin.java");
-    assertTrue(gameRenderer.contains("processBlurEffect(F)V"));
-    assertTrue(gameRenderer.contains("suppressLegacyBlurPostProcess()"));
-    String controller = read("render/Controller.java");
-    int start = controller.indexOf("public boolean suppressLegacyBlurPostProcess()");
-    assertTrue(
-        controller
-            .substring(start, controller.indexOf('}', start))
-            .contains("config.legacyPostProcessingAvailable()"));
-    String button = read("mixin/OptionInstanceMixin.java");
-    assertTrue(button.contains("DX12MC.runtime().legacyPostProcessingAvailable()"));
-    assertTrue(button.contains("button.active = false"));
-  }
-
-  @Test
   void glintStrengthHadOnlyTheOpenGlUniformAsConsumerAndNowFeedsTheD3D12Tint() throws IOException {
     assertEquals(
-        Set.of("net/minecraft/client/renderer/ShaderInstance.setDefaultUniforms"),
+        Set.of(
+            "com/mojang/blaze3d/vertex/VertexBuffer._drawWithShader",
+            LEVEL_RENDERER + ".renderChunkLayer"),
         withoutDescriptors(callersOf(RENDER_SYSTEM + ".getShaderGlintAlpha()F")));
     String drawContext = read("bridge/DrawContextFactory.java");
     assertTrue(
@@ -457,6 +519,18 @@ class VideoSettingsOriginTest {
       index++;
     }
     return -1;
+  }
+
+  private static Set<String> optionAccessorsRead(MethodNode method) {
+    Set<String> accessors = new TreeSet<>();
+    for (AbstractInsnNode insn : method.instructions) {
+      if (insn instanceof MethodInsnNode call
+          && call.owner.equals(OPTIONS)
+          && call.desc.equals("()Lnet/minecraft/client/OptionInstance;")) {
+        accessors.add(call.name);
+      }
+    }
+    return accessors;
   }
 
   static boolean readsStatic(MethodNode method, String owner, String field) {

@@ -18,7 +18,9 @@ class DrawContextGlintTest {
           "rendertype_glint_translucent",
           "rendertype_entity_glint",
           "rendertype_entity_glint_direct",
-          "rendertype_armor_entity_glint"
+          "rendertype_armor_entity_glint",
+          "rendertype_armor_glint",
+          "rendertype_glint_direct"
         }) {
       assertTrue(ShaderSemantics.of(shader).glintAlpha(), shader);
     }

@@ -27,8 +27,8 @@ class ReleaseWorkflowTest {
   @Test
   void runsForReleaseTagsOrARepeatedTagWithMinimalPermissions() throws IOException {
     String text = workflow();
-    assertTrue(text.contains("- '[0-9]*.[0-9]*.[0-9]*[+]mc*'"));
-    assertTrue(text.contains("- 'v[0-9]*.[0-9]*.[0-9]*[+]mc*'"));
+    assertTrue(text.contains("- '[0-9]*.[0-9]*.[0-9]*\\+mc*'"));
+    assertTrue(text.contains("- 'v[0-9]*.[0-9]*.[0-9]*\\+mc*'"));
     assertTrue(text.contains("workflow_dispatch:\n    inputs:\n      tag:"));
     assertTrue(text.contains("permissions:\n  contents: write\n  packages: write\n"));
     assertTrue(text.contains("ref: refs/tags/${{ env.RELEASE_TAG }}"));
@@ -72,6 +72,18 @@ class ReleaseWorkflowTest {
     assertTrue(
         build.contains("version = \"${prop(\"mod_version\")}+mc${prop(\"minecraft_version\")}\""));
     assertTrue(workflow().contains("$declared = \"$mod+mc$mc\""));
+  }
+
+  @Test
+  void workflowsRunGradleOnJdk21AndCompileWithTheJdk17Toolchain() throws IOException {
+    String properties = Files.readString(Path.of("gradle.properties"));
+    assertTrue(properties.contains("\njava_version=17"));
+    for (String file : List.of("build.yml", "publish.yml")) {
+      String text = Files.readString(Path.of(".github", "workflows", file)).replace("\r\n", "\n");
+      assertTrue(text.contains("java-version: |\n            17\n            21\n"), file);
+      assertTrue(text.contains("-Dorg.gradle.java.home=$env:JAVA_HOME"), file);
+      assertTrue(text.contains("-Dorg.gradle.java.installations.fromEnv=JAVA_HOME_17_X64"), file);
+    }
   }
 
   @Test

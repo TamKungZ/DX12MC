@@ -66,12 +66,12 @@ class StabilitySourceTest {
   }
 
   @Test
-  void immediateMeshDataPathsAreCoveredWhenGlSwapIsSuppressed() throws IOException {
+  void immediateRenderedBufferPathsAreCoveredWhenGlSwapIsSuppressed() throws IOException {
     String uploader = read("mixin/BufferUploaderMixin.java");
-    assertTrue(uploader.contains("method = \"drawWithShader\""));
+    assertTrue(uploader.contains("method = \"_drawWithShader\""));
     assertTrue(uploader.contains("method = \"draw\""));
     assertTrue(uploader.contains("drawImmediate(mesh)"));
-    assertTrue(uploader.contains("mesh.close()"));
+    assertTrue(uploader.contains("mesh.release()"));
     assertTrue(uploader.contains("ci.cancel()"));
   }
 
@@ -220,18 +220,24 @@ class StabilitySourceTest {
   }
 
   @Test
-  void legacyOpenGlMenuBlurCannotOverwriteTheD3D12Backbuffer() throws IOException {
-    String gameRenderer = read("mixin/GameRendererMixin.java");
-    String controller = read("render/Controller.java");
-    String runtime = read("client/Runtime.java");
-    assertTrue(gameRenderer.contains("processBlurEffect(F)V"));
-    assertFalse(gameRenderer.contains("method = \"renderBlur(F)V\""));
-    assertTrue(gameRenderer.contains("suppressLegacyBlurPostProcess()"));
-    assertTrue(gameRenderer.contains("ci.cancel()"));
-    assertTrue(controller.contains("public boolean suppressLegacyBlurPostProcess()"));
-    assertTrue(controller.contains("stats.suppressedLegacyBlur()"));
-    assertTrue(runtime.contains("suppressLegacyBlurPostProcess"));
-    assertFalse(controller.contains("OpenGL blur fallback"));
+  void menuBlurDoesNotExistSoNoBlurHookOrOptionIsInstalled() throws Exception {
+    ClassLoader loader = net.minecraft.client.Options.class.getClassLoader();
+    for (String name : new String[] {"processBlurEffect", "renderBlur"}) {
+      for (java.lang.reflect.Method method :
+          Class.forName("net.minecraft.client.renderer.GameRenderer", false, loader)
+              .getDeclaredMethods()) {
+        assertNotEquals(name, method.getName());
+      }
+    }
+    for (java.lang.reflect.Field field : net.minecraft.client.Options.class.getDeclaredFields()) {
+      assertFalse(field.getName().toLowerCase().contains("blur"), field.getName());
+    }
+    assertFalse(read("mixin/GameRendererMixin.java").contains("Blur"));
+    assertFalse(read("client/VideoOptions.java").contains("Blur"));
+    assertFalse(read("render/Controller.java").contains("Blur"));
+    assertFalse(
+        Files.readString(Path.of("src", "main", "resources", "dx12mc.mixins.json"))
+            .contains("OptionInstanceMixin"));
   }
 
   @Test
@@ -246,9 +252,9 @@ class StabilitySourceTest {
             + read("bridge/DrawContext.java")
             + read("bridge/mesh/MeshStore.java");
     String pipeline = read("graphics/pipeline/ShaderPipeline.java");
-    assertTrue(encoder.contains("VertexFormatElement.UV1"));
-    assertTrue(encoder.contains("VertexFormatElement.UV2"));
-    assertTrue(encoder.contains("VertexFormatElement.NORMAL"));
+    assertTrue(encoder.contains("DefaultVertexFormat.ELEMENT_UV1"));
+    assertTrue(encoder.contains("DefaultVertexFormat.ELEMENT_UV2"));
+    assertTrue(encoder.contains("DefaultVertexFormat.ELEMENT_NORMAL"));
     assertTrue(batch.contains("boolean hasUv2"));
     assertTrue(batch.contains("boolean hasNormal"));
     assertTrue(layout.contains("BGFX_ATTRIB_TEXCOORD2"));
@@ -323,7 +329,8 @@ class StabilitySourceTest {
     String runtime = read("client/Runtime.java");
     String controller = read("render/Controller.java") + read("render/SectionRenderContext.java");
     String mixins = Files.readString(Path.of("src", "main", "resources", "dx12mc.mixins.json"));
-    assertTrue(level.contains("renderSectionLayer"));
+    assertTrue(level.contains("renderChunkLayer"));
+    assertFalse(level.contains("renderSectionLayer"));
     assertTrue(level.contains("Uniform;set(FFF)V"));
     assertTrue(level.contains("Uniform;upload()V"));
     assertTrue(level.contains("VertexBuffer;bind()V"));
@@ -517,7 +524,7 @@ class StabilitySourceTest {
                     "src/main/java/net/dx12mc/bridge/state/BgfxStateEncoder.java"));
     org.junit.jupiter.api.Assertions.assertTrue(
         mixin.contains(
-            "renderSky(Lorg/joml/Matrix4f;Lorg/joml/Matrix4f;FLnet/minecraft/client/Camera;ZLjava/lang/Runnable;)V"));
+            "renderSky(Lcom/mojang/blaze3d/vertex/PoseStack;Lorg/joml/Matrix4f;FLnet/minecraft/client/Camera;ZLjava/lang/Runnable;)V"));
     org.junit.jupiter.api.Assertions.assertTrue(state.contains("skyCompatibilitySnapshot"));
     org.junit.jupiter.api.Assertions.assertTrue(state.contains("static long sky("));
   }

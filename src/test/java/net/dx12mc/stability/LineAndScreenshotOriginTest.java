@@ -46,16 +46,15 @@ class LineAndScreenshotOriginTest {
                 callersOf(
                     "net/minecraft/client/renderer/GameRenderer.getRendertypeLinesShader()Lnet/minecraft/client/renderer/ShaderInstance;"))
             .contains("com/mojang/blaze3d/platform/GLX._renderCrosshair"));
-    MethodNode endLastVertex =
-        method("com/mojang/blaze3d/vertex/BufferBuilder", "endLastVertex", "()V");
-    assertTrue(readsStatic(endLastVertex, MODE, "LINES"), "vanilla duplicates every line vertex");
-    assertTrue(readsStatic(endLastVertex, MODE, "LINE_STRIP"));
+    MethodNode endVertex = method("com/mojang/blaze3d/vertex/BufferBuilder", "endVertex", "()V");
+    assertTrue(readsStatic(endVertex, MODE, "LINES"), "vanilla duplicates every line vertex");
+    assertTrue(readsStatic(endVertex, MODE, "LINE_STRIP"));
+    assertEquals(
+        java.util.Set.of("com/mojang/blaze3d/vertex/VertexBuffer._drawWithShader"),
+        withoutDescriptors(callersOf(RENDER_SYSTEM + ".getShaderLineWidth()F")));
     assertTrue(
-        invokes(
-            method("net/minecraft/client/renderer/ShaderInstance", "setDefaultUniforms", null),
-            RENDER_SYSTEM,
-            "getShaderLineWidth",
-            "()F"));
+        withoutDescriptors(callersOf(RENDER_SYSTEM + ".lineWidth(F)V"))
+            .contains("net/minecraft/client/renderer/RenderStateShard$LineStateShard.<init>"));
     assertFalse(read("bridge/Bridge.java").contains("isOmittableNativeLine"));
     assertTrue(
         read("bridge/DrawContextFactory.java").contains("RenderSystem.getShaderLineWidth()"));
@@ -73,7 +72,14 @@ class LineAndScreenshotOriginTest {
     assertTrue(line.contains("if (lineOffset.x < 0.0) lineOffset *= -1.0;"));
     assertTrue(vanilla.contains("if (gl_VertexID % 2 == 0) {"));
     assertTrue(read("graphics/bgfx/Packing.java").contains("(vertex & 1) == 0 ? 1.0f : -1.0f"));
-    assertTrue(vanilla.contains("vertexDistance = fog_distance(Position, FogShape);"));
+    assertTrue(
+        vanilla.contains("vertexDistance = fog_distance(ModelViewMat, Position, FogShape);"));
+    assertTrue(
+        vanilla.contains(
+            "vec4 linePosEnd = ProjMat * VIEW_SCALE * ModelViewMat * vec4(Position + Normal,"
+                + " 1.0);"));
+    assertTrue(
+        line.contains("dx12mcFogDistance(mul(u_fogModel, clip).xyz, u_fogView, u_fogParams.z)"));
   }
 
   @Test
@@ -109,6 +115,32 @@ class LineAndScreenshotOriginTest {
                     + ".takeScreenshot("
                     + RENDER_TARGET
                     + ")Lcom/mojang/blaze3d/platform/NativeImage;")));
+    MethodNode grabNamed =
+        method(
+            SCREENSHOT,
+            "grab",
+            "(Ljava/io/File;Ljava/lang/String;"
+                + RENDER_TARGET
+                + "Ljava/util/function/Consumer;)V");
+    assertTrue(invokes(grabNamed, RENDER_SYSTEM, "recordRenderCall", null));
+    assertTrue(invokes(grabNamed, SCREENSHOT, "_grab", null));
+    assertTrue(
+        invokes(
+            method(
+                SCREENSHOT,
+                "grab",
+                "(Ljava/io/File;" + RENDER_TARGET + "Ljava/util/function/Consumer;)V"),
+            SCREENSHOT,
+            "grab",
+            null));
+    assertTrue(
+        withoutDescriptors(
+                callersOf("com/mojang/blaze3d/platform/NativeImage.writeToFile(Ljava/io/File;)V"))
+            .contains(SCREENSHOT + "._grab"),
+        "the file is written by the lambda _grab hands to the IO pool");
+    assertTrue(
+        indexOf(grab, SCREENSHOT, "takeScreenshot")
+            < indexOf(grab, "net/minecraft/Util", "ioPool"));
     String mixin = read("mixin/ScreenshotMixin.java");
     assertTrue(mixin.contains("method =\n          \"_grab("));
     assertTrue(mixin.contains("\"takeScreenshot(Lcom/mojang/blaze3d/pipeline/RenderTarget;)"));

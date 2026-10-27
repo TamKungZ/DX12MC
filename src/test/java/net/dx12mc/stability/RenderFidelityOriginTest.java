@@ -12,6 +12,7 @@ import com.mojang.blaze3d.platform.NativeImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
 import net.minecraft.client.Options;
 import org.junit.jupiter.api.Test;
 import org.objectweb.asm.tree.MethodNode;
@@ -24,6 +25,10 @@ class RenderFidelityOriginTest {
   private static final String GL_STATE = "com/mojang/blaze3d/platform/GlStateManager";
   private static final String RENDER_TARGET = "com/mojang/blaze3d/pipeline/RenderTarget";
   private static final String POST_CHAIN = "net/minecraft/client/renderer/PostChain";
+  private static final String VERTEX_BUFFER = "com/mojang/blaze3d/vertex/VertexBuffer";
+  private static final String BUFFER_UPLOADER = "com/mojang/blaze3d/vertex/BufferUploader";
+  private static final Set<String> UNIFORM_SETTERS =
+      Set.of(VERTEX_BUFFER + "._drawWithShader", LEVEL_RENDERER + ".renderChunkLayer");
 
   @Test
   void handAndGuiDepthClearsReachTheGlClearDx12mcTranslates() throws IOException {
@@ -105,17 +110,74 @@ class RenderFidelityOriginTest {
     assertTrue(invokes(setupFog, RENDER_SYSTEM, "setShaderFogStart", "(F)V"));
     assertTrue(invokes(setupFog, RENDER_SYSTEM, "setShaderFogEnd", "(F)V"));
     assertTrue(invokes(setupFog, RENDER_SYSTEM, "setShaderFogShape", null));
-    MethodNode defaults =
-        method("net/minecraft/client/renderer/ShaderInstance", "setDefaultUniforms", null);
-    assertTrue(invokes(defaults, RENDER_SYSTEM, "getShaderFogStart", "()F"));
-    assertTrue(invokes(defaults, RENDER_SYSTEM, "getShaderFogEnd", "()F"));
-    assertTrue(invokes(defaults, RENDER_SYSTEM, "getShaderFogColor", "()[F"));
-    assertTrue(invokes(defaults, RENDER_SYSTEM, "getShaderFogShape", null));
+    for (String getter :
+        new String[] {
+          "getShaderFogStart()F",
+          "getShaderFogEnd()F",
+          "getShaderFogColor()[F",
+          "getShaderFogShape()Lcom/mojang/blaze3d/shaders/FogShape;"
+        }) {
+      assertEquals(
+          UNIFORM_SETTERS, withoutDescriptors(callersOf(RENDER_SYSTEM + "." + getter)), getter);
+    }
     String factory = read("bridge/DrawContextFactory.java");
     assertTrue(factory.contains("RenderSystem.getShaderFogStart()"));
     assertTrue(factory.contains("RenderSystem.getShaderFogEnd()"));
     assertTrue(factory.contains("RenderSystem.getShaderFogShape().getIndex()"));
     assertTrue(factory.contains("RenderSystem.getShaderFogColor()"));
+  }
+
+  @Test
+  void drawMatricesAndRemainingUniformsComeFromTheVanillaDrawPaths() throws IOException {
+    String uploader = BUFFER_UPLOADER + "._drawWithShader";
+    assertEquals(
+        Set.of(uploader),
+        withoutDescriptors(callersOf(RENDER_SYSTEM + ".getModelViewMatrix()Lorg/joml/Matrix4f;")));
+    assertEquals(
+        Set.of(uploader),
+        withoutDescriptors(callersOf(RENDER_SYSTEM + ".getProjectionMatrix()Lorg/joml/Matrix4f;")));
+    assertEquals(
+        Set.of(uploader, LEVEL_RENDERER + ".renderClouds", LEVEL_RENDERER + ".renderSky"),
+        withoutDescriptors(
+            callersOf(
+                VERTEX_BUFFER
+                    + ".drawWithShader(Lorg/joml/Matrix4f;Lorg/joml/Matrix4f;"
+                    + "Lnet/minecraft/client/renderer/ShaderInstance;)V")));
+    assertEquals(
+        Set.of(LEVEL_RENDERER + ".renderLevel"),
+        withoutDescriptors(
+            callersOf(
+                LEVEL_RENDERER
+                    + ".renderChunkLayer(Lnet/minecraft/client/renderer/RenderType;"
+                    + "Lcom/mojang/blaze3d/vertex/PoseStack;DDDLorg/joml/Matrix4f;)V")));
+    assertEquals(
+        Set.of(VERTEX_BUFFER + "._drawWithShader"),
+        withoutDescriptors(
+            callersOf(RENDER_SYSTEM + ".getInverseViewRotationMatrix()Lorg/joml/Matrix3f;")));
+    assertEquals(
+        Set.of(GAME_RENDERER + ".renderLevel"),
+        withoutDescriptors(
+            callersOf(RENDER_SYSTEM + ".setInverseViewRotationMatrix(Lorg/joml/Matrix3f;)V")));
+    for (String getter :
+        new String[] {
+          "getShaderColor()[F", "getShaderGameTime()F", "getTextureMatrix()Lorg/joml/Matrix4f;"
+        }) {
+      assertEquals(
+          UNIFORM_SETTERS, withoutDescriptors(callersOf(RENDER_SYSTEM + "." + getter)), getter);
+    }
+    assertEquals(
+        Set.of(VERTEX_BUFFER + "._drawWithShader"),
+        withoutDescriptors(callersOf(RENDER_SYSTEM + ".getShaderLineWidth()F")));
+    String factory = read("bridge/DrawContextFactory.java");
+    assertTrue(factory.contains("RenderSystem.getInverseViewRotationMatrix()"));
+    assertTrue(factory.contains("RenderSystem.getShaderColor()"));
+    assertTrue(factory.contains("RenderSystem.getTextureMatrix()"));
+    assertTrue(factory.contains("RenderSystem.getShaderGameTime()"));
+    assertTrue(factory.contains("RenderSystem.getShaderLineWidth()"));
+    String controller = read("render/Controller.java");
+    assertTrue(controller.contains("RenderSystem.getModelViewMatrix()"));
+    assertTrue(controller.contains("RenderSystem.getProjectionMatrix()"));
+    assertTrue(read("mixin/LevelRendererMixin.java").contains("poseStack.last().pose()"));
   }
 
   @Test
@@ -128,10 +190,22 @@ class RenderFidelityOriginTest {
             null));
     assertTrue(
         invokes(
+            method(RENDER_SYSTEM, "setupGui3DDiffuseLighting", null),
+            GL_STATE,
+            "setupGui3DDiffuseLighting",
+            null));
+    assertTrue(
+        invokes(
             method(GL_STATE, "setupGui3DDiffuseLighting", null),
             GL_STATE,
             "setupLevelDiffuseLighting",
             null));
+    assertEquals(
+        UNIFORM_SETTERS,
+        withoutDescriptors(
+            callersOf(
+                RENDER_SYSTEM
+                    + ".setupShaderLights(Lnet/minecraft/client/renderer/ShaderInstance;)V")));
     assertTrue(
         invokes(
             method(
@@ -152,10 +226,10 @@ class RenderFidelityOriginTest {
                 "net/minecraft/client/renderer/texture/OverlayTexture", "setupOverlayColor", "()V"),
             RENDER_SYSTEM,
             "setupOverlayColor",
-            "(II)V"));
+            "(Ljava/util/function/IntSupplier;I)V"));
     assertTrue(
         invokes(
-            method(RENDER_SYSTEM, "setupOverlayColor", "(II)V"),
+            method(RENDER_SYSTEM, "setupOverlayColor", "(Ljava/util/function/IntSupplier;I)V"),
             RENDER_SYSTEM,
             "setShaderTexture",
             "(II)V"));

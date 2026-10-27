@@ -1,9 +1,7 @@
 package net.dx12mc.bridge.mesh;
 
 import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -20,7 +18,7 @@ public final class CpuBench {
 
   public static void main(String[] args) {
     ByteBuffer target = MemoryUtil.memAlloc(VERTICES * 4 * 32 + 64);
-    MeshData mesh = meshOnce();
+    BufferBuilder.RenderedBuffer mesh = meshOnce();
     Batch batch = Encoder.encode(mesh);
     for (int pass = 0; pass < 3; pass++) {
       System.out.println("pass " + pass);
@@ -30,12 +28,12 @@ public final class CpuBench {
       bench("Packing.indices 16-bit", null, batch, target, 3);
       bench("Assembler 4 members", null, batch, target, 4);
     }
-    mesh.close();
+    mesh.release();
     MemoryUtil.memFree(target);
   }
 
   private static void bench(
-      String name, MeshData source, Batch batch, ByteBuffer target, int kind) {
+      String name, BufferBuilder.RenderedBuffer source, Batch batch, ByteBuffer target, int kind) {
     long best = Long.MAX_VALUE;
     for (int repeat = 0; repeat < 5; repeat++) {
       long start = System.nanoTime();
@@ -82,24 +80,24 @@ public final class CpuBench {
     return ASSEMBLER.assemble(members, 0, members.size(), 0, 0, 0);
   }
 
-  private static MeshData meshOnce() {
-    ByteBufferBuilder buffer = new ByteBufferBuilder(VERTICES * 40);
-    BufferBuilder builder =
-        new BufferBuilder(buffer, VertexFormat.Mode.QUADS, DefaultVertexFormat.BLOCK);
+  private static BufferBuilder.RenderedBuffer meshOnce() {
+    BufferBuilder builder = new BufferBuilder(VERTICES * 40);
+    builder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.BLOCK);
     for (int q = 0; q < VERTICES / 4; q++) {
       float x = q % 16;
       float z = q / 16 % 16;
       float y = q / 256;
       for (int c = 0; c < 4; c++) {
         builder
-            .addVertex(x + (c == 1 || c == 2 ? 1f : 0f), y, z + (c >= 2 ? 1f : 0f))
-            .setColor(255, 255, 255, 255)
-            .setUv(0.25f * c, 0.5f)
-            .setLight(0xF000F0)
-            .setNormal(0f, 1f, 0f);
+            .vertex(x + (c == 1 || c == 2 ? 1f : 0f), y, z + (c >= 2 ? 1f : 0f))
+            .color(255, 255, 255, 255)
+            .uv(0.25f * c, 0.5f)
+            .uv2(0xF000F0)
+            .normal(0f, 1f, 0f)
+            .endVertex();
       }
     }
-    return builder.buildOrThrow();
+    return builder.end();
   }
 
   private static void legacyVertices(ByteBuffer target, Batch batch) {
