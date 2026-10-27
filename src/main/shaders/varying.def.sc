@@ -12,3 +12,4 @@ float v_fog : TEXCOORD3;
 vec4 v_overlay : TEXCOORD4;
 vec4 v_light : TEXCOORD5;
 vec3 v_normal : NORMAL;
+vec4 v_texProj : TEXCOORD6;
