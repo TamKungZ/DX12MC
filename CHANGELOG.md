@@ -4,6 +4,13 @@ Note: 0.9.0 is the version that fixes the low FPS problem. On a GT1030 it perfor
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
+## 0.11.2 - Build fixes
+
+- Rebuild the compiled D3D12 shaders when the pinned shaderc hash, shader profile or optimization level changes. Before, a changed compiler left stale shader binaries in place because only the shader sources were tracked.
+- Put the compiled shaders on the main output, so a development run (`runClient`) finds them as well as the jar. Before, they were added to the jar only.
+- Run Gradle in the `build.yml` workflow on the runner JDK with `-Dorg.gradle.java.home`, the same as `publish.yml`, instead of the machine-specific path in `gradle.properties`.
+- Fix `ReleaseWorkflowTest`, which still checked an older tag pattern than the one `publish.yml` uses.
+
 ## 0.11.1 - End portal and End Poem background
 
 - Draw the end portal and the end gateway with a port of the vanilla `rendertype_end_portal` shader instead of a plain white fill. The shader layers the end sky and end portal textures with Minecraft's per-layer colours, rotation, scale and game-time scroll (15 layers for the portal, 16 for the gateway). Previously these draws had no texture coordinates, so they fell back to the plain colour program and came out solid white.
