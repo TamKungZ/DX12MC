@@ -10,7 +10,8 @@ public final class DrawContext {
     TEXTURE(true, false),
     TEXTURE_LIGHT(true, true),
     ENTITY(true, true),
-    LINE(false, false);
+    LINE(false, false),
+    END_PORTAL(true, false);
 
     private final boolean textured;
     private final boolean lightmapped;
@@ -41,6 +42,7 @@ public final class DrawContext {
   final float[] lightDirection0 = new float[4];
   final float[] lightDirection1 = new float[4];
   final float[] lineParams = new float[4];
+  final float[] portalParams = new float[4];
   long primitive;
   private Kind kind = Kind.COLOR;
   private Texture texture;
@@ -143,6 +145,10 @@ public final class DrawContext {
 
   public float[] lineParams() {
     return lineParams;
+  }
+
+  public float[] portalParams() {
+    return portalParams;
   }
 
   public long primitive() {
