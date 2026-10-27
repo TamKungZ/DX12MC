@@ -201,6 +201,24 @@ public final class RenderState {
     return cachedStandard;
   }
 
+  public long blitState(boolean disableBlend) {
+    return BgfxStateEncoder.standard(
+        true,
+        true,
+        true,
+        false,
+        false,
+        BgfxStateEncoder.GL_LEQUAL,
+        false,
+        blend && !disableBlend,
+        srcRgb,
+        dstRgb,
+        srcAlpha,
+        dstAlpha,
+        blendEquation,
+        false);
+  }
+
   public Snapshot skyCompatibilitySnapshot(int framebufferWidth, int framebufferHeight) {
     validateUnsupportedState();
     if (colorLogic) {
