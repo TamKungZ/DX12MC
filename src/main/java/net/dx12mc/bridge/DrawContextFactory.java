@@ -142,9 +142,11 @@ final class DrawContextFactory {
             : null;
     DrawContext.Kind kind = kind(batch, sampled != null, lightmap != null, immediate);
     Texture overlay =
-        kind == DrawContext.Kind.ENTITY && semantics.overlay() && batch.hasUv1()
-            ? resolveOptional(RenderSystem.getShaderTexture(1))
-            : null;
+        kind == DrawContext.Kind.END_PORTAL
+            ? resolveRequired(1, shader)
+            : kind == DrawContext.Kind.ENTITY && semantics.overlay() && batch.hasUv1()
+                ? resolveOptional(RenderSystem.getShaderTexture(1))
+                : null;
     ShaderInputs.light(
         semantics,
         lightmap != null,
@@ -153,11 +155,15 @@ final class DrawContextFactory {
         context.lightParams);
     context.textureLod[0] = sampled == null ? 0.0f : sampled.maxLod();
     if (kind == DrawContext.Kind.ENTITY) prepareLightDirections();
+    if (kind == DrawContext.Kind.END_PORTAL) {
+      ShaderInputs.portal(semantics, RenderSystem.getShaderGameTime(), context.portalParams);
+    }
     return context.set(kind, sampled, lightmap, overlay, semantics.discards(), state);
   }
 
   private DrawContext.Kind kind(
       Batch batch, boolean textured, boolean lightmapped, boolean immediate) {
+    if (semantics.endPortal()) return DrawContext.Kind.END_PORTAL;
     if (immediate && semantics.screenSpaceLines() && batch.hasNormal() && expandsLines(batch)) {
       return DrawContext.Kind.LINE;
     }
@@ -225,8 +231,12 @@ final class DrawContextFactory {
   }
 
   private Texture resolveBaseTexture(Batch batch, String shader) {
-    if (!batch.hasUv0()) return null;
-    int textureId = RenderSystem.getShaderTexture(0);
+    if (!batch.hasUv0() && !semantics.endPortal()) return null;
+    return resolveRequired(0, shader);
+  }
+
+  private Texture resolveRequired(int slot, String shader) {
+    int textureId = RenderSystem.getShaderTexture(slot);
     Texture sampled = textures.resolve(textureId);
     if (sampled != null) return sampled;
     throw new UnsupportedRenderPathException(
