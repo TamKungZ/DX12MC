@@ -1,5 +1,6 @@
 package net.dx12mc.render;
 
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.platform.Window;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -7,7 +8,9 @@ import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexBuffer;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import net.dx12mc.DX12MC;
 import net.dx12mc.bridge.Bridge;
@@ -16,10 +19,16 @@ import net.dx12mc.bridge.Stats;
 import net.dx12mc.config.Config;
 import net.dx12mc.graphics.RendererInfo;
 import net.dx12mc.graphics.bgfx.ScreenCapture;
+import net.dx12mc.graphics.bgfx.Target;
 import net.dx12mc.graphics.bgfx.ViewSequence;
+import net.dx12mc.graphics.pipeline.PostPipeline;
+import net.dx12mc.mixin.GameRendererAccessor;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.PostChain;
 import net.minecraft.client.renderer.RenderType;
 import org.joml.Matrix4f;
+import org.lwjgl.bgfx.BGFX;
 
 public final class Controller implements AutoCloseable {
   private final Config config;
@@ -31,7 +40,13 @@ public final class Controller implements AutoCloseable {
   private int legacyVertexBufferUploadDepth;
   private int clearRgba;
   private float clearDepth = 1.0f;
-  private boolean offscreenTargetBound;
+  private static final int GL_LINEAR = 9729;
+  private final PostProcessor post;
+  private final Map<RenderTarget, PendingClear> pendingClears = new IdentityHashMap<>();
+  private final float[] blitValues = new float[PostPipeline.UNIFORM_FLOATS];
+  private RenderTarget boundTarget;
+  private RenderTarget appliedTarget;
+  private boolean appliedStale;
   private static final int SCREEN_CAPTURE_TIMEOUT_FRAMES = 60;
   private final List<CaptureRequest> captureRequests = new ArrayList<>();
   private boolean captureInFlight;
@@ -44,6 +59,7 @@ public final class Controller implements AutoCloseable {
     this.bridge = config.nativeMode() ? new Bridge(stats) : null;
     this.lifecycle = new RendererLifecycle(config, bridge, stats);
     this.clearRgba = config.clearColorRgba();
+    this.post = bridge == null ? null : new PostProcessor(bridge, this);
   }
 
   public void initialize() {
@@ -106,9 +122,15 @@ public final class Controller implements AutoCloseable {
   public boolean clear(int mask) {
     if (!config.nativeMode() || !lifecycle.active()) return false;
     throwIfFailed();
-    if (offscreenTargetBound) return true;
+    if (boundTarget != null) {
+      deferClear(boundTarget, mask);
+      return true;
+    }
     try {
-      lifecycle.clear(Minecraft.getInstance(), mask, clearRgba, clearDepth);
+      Minecraft minecraft = Minecraft.getInstance();
+      ensureFrame(minecraft);
+      syncTarget();
+      lifecycle.clear(minecraft, mask, clearRgba, clearDepth);
       return true;
     } catch (FatalRenderException fatal) {
       throw fatal;
@@ -118,14 +140,157 @@ public final class Controller implements AutoCloseable {
     }
   }
 
-  public void bindRenderTarget(boolean mainTarget) {
-    offscreenTargetBound = !mainTarget;
+  public void bindRenderTarget(RenderTarget target) {
+    Minecraft minecraft = Minecraft.getInstance();
+    boundTarget =
+        target == null || minecraft == null || target == minecraft.getMainRenderTarget()
+            ? null
+            : target;
   }
 
-  public boolean suppressPostChain() {
-    if (config.legacyPostProcessingAvailable()) return false;
+  public void releaseRenderTarget(RenderTarget target) {
+    pendingClears.remove(target);
+    if (boundTarget == target) boundTarget = null;
+    if (appliedTarget == target) appliedStale = true;
+    if (bridge != null) bridge.releaseTarget(target);
+  }
+
+  public boolean processPostChain(PostChain chain, float partialTick) {
+    if (!config.nativeMode() || !lifecycle.active()) return false;
     throwIfFailed();
-    return lifecycle.active();
+    try {
+      ensureFrame(Minecraft.getInstance());
+      return post.process(chain, partialTick);
+    } catch (FatalRenderException fatal) {
+      throw fatal;
+    } catch (Throwable throwable) {
+      throw fatal("Native D3D12 post-processing failed.", throwable);
+    }
+  }
+
+  public boolean blitRenderTarget(RenderTarget target, boolean disableBlend) {
+    if (!config.nativeMode() || !lifecycle.active()) return false;
+    throwIfFailed();
+    Minecraft minecraft = Minecraft.getInstance();
+    if (minecraft == null || target == minecraft.getMainRenderTarget()) {
+      return suppressVanillaFramebufferBlit();
+    }
+    try {
+      long state = bridge.blitState(disableBlend);
+      PendingClear pending = pendingClears.get(target);
+      if (pending != null && pending.active && (state & BGFX.BGFX_STATE_BLEND_MASK) != 0L) {
+        return true;
+      }
+      ensureFrame(minecraft);
+      materializeClear(target);
+      syncTarget();
+      Target source = bridge.target(target);
+      java.util.Arrays.fill(blitValues, 0.0f);
+      blitValues[0] = blitValues[2] = target.width;
+      blitValues[1] = blitValues[3] = target.height;
+      blitValues[4] = blitValues[5] = blitValues[6] = blitValues[7] = 1.0f;
+      if (!bridge
+          .post()
+          .draw(
+              PostPipeline.Effect.BLIT,
+              source.colorTexture(),
+              BGFX.BGFX_INVALID_HANDLE,
+              target.filterMode == GL_LINEAR,
+              blitValues,
+              state)) {
+        throw new IllegalStateException("bgfx/D3D12 rejected a render target blit");
+      }
+      return true;
+    } catch (FatalRenderException fatal) {
+      throw fatal;
+    } catch (Throwable throwable) {
+      throw fatal("Native D3D12 render target blit failed.", throwable);
+    }
+  }
+
+  boolean mainRedirected() {
+    return lifecycle.mainRedirected();
+  }
+
+  Target nativeTarget(RenderTarget target) {
+    if (target == Minecraft.getInstance().getMainRenderTarget() && !lifecycle.mainRedirected()) {
+      return null;
+    }
+    return bridge.target(target);
+  }
+
+  void applyTarget(RenderTarget target) {
+    RenderTarget wanted = target == Minecraft.getInstance().getMainRenderTarget() ? null : target;
+    if (wanted == appliedTarget && !appliedStale) return;
+    lifecycle.bindTarget(wanted == null ? null : bridge.target(wanted));
+    appliedTarget = wanted;
+    appliedStale = false;
+  }
+
+  void clearApplied(int rgba, boolean depth) {
+    lifecycle.clear(
+        Minecraft.getInstance(),
+        ViewSequence.GL_COLOR_BUFFER_BIT | (depth ? ViewSequence.GL_DEPTH_BUFFER_BIT : 0),
+        rgba,
+        1.0f);
+  }
+
+  void finishPostChain() {
+    boundTarget = null;
+  }
+
+  void materializeClear(RenderTarget target) {
+    PendingClear pending = pendingClears.get(target);
+    if (pending == null || !pending.active) return;
+    pending.active = false;
+    Minecraft minecraft = Minecraft.getInstance();
+    ensureFrame(minecraft);
+    applyTarget(target);
+    lifecycle.clear(minecraft, pending.mask, pending.rgba, pending.depth);
+  }
+
+  private void deferClear(RenderTarget target, int mask) {
+    PendingClear pending = pendingClears.computeIfAbsent(target, ignored -> new PendingClear());
+    pending.active = true;
+    pending.mask = mask;
+    pending.rgba = clearRgba;
+    pending.depth = clearDepth;
+  }
+
+  private void syncTarget() {
+    if (boundTarget == null && appliedTarget == null && !appliedStale) return;
+    if (boundTarget != null) materializeClear(boundTarget);
+    applyTarget(boundTarget == null ? Minecraft.getInstance().getMainRenderTarget() : boundTarget);
+  }
+
+  private void ensureFrame(Minecraft minecraft) {
+    if (lifecycle.frameOpen()) return;
+    Target main =
+        needsReadableMain(minecraft) ? bridge.target(minecraft.getMainRenderTarget()) : null;
+    lifecycle.ensureFrame(minecraft, main);
+    appliedTarget = null;
+    appliedStale = false;
+  }
+
+  private static boolean needsReadableMain(Minecraft minecraft) {
+    GameRenderer renderer = minecraft.gameRenderer;
+    if (renderer == null) return false;
+    GameRendererAccessor access = (GameRendererAccessor) renderer;
+    if (minecraft.screen != null
+        && minecraft.options.getMenuBackgroundBlurriness() >= 1
+        && access.dx12mc$blurEffect() != null) {
+      return true;
+    }
+    return minecraft.level != null
+        && renderer.currentEffect() != null
+        && access.dx12mc$effectActive();
+  }
+
+  private static final class PendingClear {
+    boolean active;
+    int mask;
+    int rgba;
+    float depth;
   }
 
   public void bindTexture(int id) {
@@ -323,13 +488,14 @@ public final class Controller implements AutoCloseable {
   public boolean draw(Slot slot, Matrix4f modelView, Matrix4f projection) {
     if (!config.nativeMode()) return false;
     throwIfFailed();
-    if (offscreenTargetBound && lifecycle.active()) return true;
     lifecycle.ensureInitialized(Minecraft.getInstance());
     lifecycle.requireActive("VertexBuffer draw");
     try {
-      lifecycle.ensureFrame(Minecraft.getInstance());
+      ensureFrame(Minecraft.getInstance());
+      syncTarget();
       Window window = Minecraft.getInstance().getWindow();
-      if (!bridge.draw(slot, modelView, projection, window.getWidth(), window.getHeight())) {
+      if (!bridge.draw(
+          slot, modelView, projection, framebufferWidth(window), framebufferHeight(window))) {
         throw new IllegalStateException("D3D12 bridge returned no submission");
       }
       stats.cancelledVanillaDraw();
@@ -368,7 +534,8 @@ public final class Controller implements AutoCloseable {
     Minecraft minecraft = Minecraft.getInstance();
     lifecycle.ensureInitialized(minecraft);
     lifecycle.requireActive("section-layer draw");
-    lifecycle.ensureFrame(minecraft);
+    ensureFrame(minecraft);
+    syncTarget();
     Window window = minecraft.getWindow();
     section.begin(
         modelView, projection, window.getWidth(), window.getHeight(), cameraX, cameraY, cameraZ);
@@ -445,18 +612,18 @@ public final class Controller implements AutoCloseable {
   public boolean drawImmediate(MeshData mesh) {
     if (!config.nativeMode()) return false;
     throwIfFailed();
-    if (offscreenTargetBound && lifecycle.active()) return true;
     lifecycle.ensureInitialized(Minecraft.getInstance());
     lifecycle.requireActive("immediate MeshData draw");
     try {
-      lifecycle.ensureFrame(Minecraft.getInstance());
+      ensureFrame(Minecraft.getInstance());
+      syncTarget();
       Window window = Minecraft.getInstance().getWindow();
       if (!bridge.drawImmediate(
           mesh,
           RenderSystem.getModelViewMatrix(),
           RenderSystem.getProjectionMatrix(),
-          window.getWidth(),
-          window.getHeight())) {
+          framebufferWidth(window),
+          framebufferHeight(window))) {
         throw new IllegalStateException("D3D12 immediate bridge returned no submission");
       }
       stats.cancelledVanillaDraw();
@@ -466,6 +633,14 @@ public final class Controller implements AutoCloseable {
     } catch (Throwable throwable) {
       throw fatal("Native D3D12 immediate submission failed.", throwable);
     }
+  }
+
+  private int framebufferWidth(Window window) {
+    return appliedTarget == null ? window.getWidth() : appliedTarget.width;
+  }
+
+  private int framebufferHeight(Window window) {
+    return appliedTarget == null ? window.getHeight() : appliedTarget.height;
   }
 
   public void release(Slot slot) {
@@ -515,14 +690,6 @@ public final class Controller implements AutoCloseable {
 
   public boolean suppressLegacyOpenGlDriverWork() {
     return config.nativeMode() && lifecycle.active();
-  }
-
-  public boolean suppressLegacyBlurPostProcess() {
-    if (config.legacyPostProcessingAvailable()) return false;
-    throwIfFailed();
-    if (!lifecycle.active()) return false;
-    stats.suppressedLegacyBlur();
-    return true;
   }
 
   public void assertOpenGlDrawAllowed(String operation) {
