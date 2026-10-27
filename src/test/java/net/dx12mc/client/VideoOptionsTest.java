@@ -1,13 +1,17 @@
 package net.dx12mc.client;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.mojang.serialization.Codec;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import net.minecraft.client.GraphicsStatus;
 import net.minecraft.client.OptionInstance;
+import net.minecraft.nbt.IntTag;
+import net.minecraft.nbt.NbtOps;
 import org.junit.jupiter.api.Test;
 
 class VideoOptionsTest {
@@ -32,13 +36,24 @@ class VideoOptionsTest {
   }
 
   @Test
-  void onlyTheMenuBlurButtonIsDisabledAndOnlyWithoutPostProcessing() {
-    OptionInstance<Boolean> menuBlur = OptionInstance.createBoolean("test.menuBlur", true);
-    OptionInstance<Boolean> other = OptionInstance.createBoolean("test.other", true);
+  void aSavedFabulousValueIsRejectedByTheFilteredValueSetSoTheOptionFallsBackToItsFancyDefault() {
+    List<GraphicsStatus> filtered =
+        VideoOptions.graphicsModes(Arrays.asList(GraphicsStatus.values()), false);
+    OptionInstance.AltEnum<GraphicsStatus> valueSet =
+        new OptionInstance.AltEnum<>(
+            filtered,
+            List.of(GraphicsStatus.FAST, GraphicsStatus.FANCY),
+            () -> false,
+            (option, value) -> {},
+            Codec.INT.xmap(GraphicsStatus::byId, GraphicsStatus::getId));
+    assertTrue(valueSet.validateValue(GraphicsStatus.FABULOUS).isEmpty());
     assertEquals(
-        VideoOptions.MENU_BLUR_UNAVAILABLE,
-        VideoOptions.unavailableReason(menuBlur, menuBlur, false));
-    assertNull(VideoOptions.unavailableReason(other, menuBlur, false));
-    assertNull(VideoOptions.unavailableReason(menuBlur, menuBlur, true));
+        GraphicsStatus.FABULOUS,
+        valueSet
+            .codec()
+            .parse(NbtOps.INSTANCE, IntTag.valueOf(GraphicsStatus.FABULOUS.getId()))
+            .result()
+            .orElseThrow());
+    assertEquals(Optional.of(GraphicsStatus.FANCY), valueSet.validateValue(GraphicsStatus.FANCY));
   }
 }
