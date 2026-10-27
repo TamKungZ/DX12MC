@@ -22,7 +22,11 @@
     "OptionsMixin",
     "PostChainMixin",
     "ScreenshotInvoker",
-    "GameRendererInvoker"
+    "GameRendererInvoker",
+    "PostChainAccessor",
+    "PostPassAccessor",
+    "RenderTargetAccessor",
+    "GameRendererAccessor"
   ],
   "injectors": {
     "defaultRequire": 1
