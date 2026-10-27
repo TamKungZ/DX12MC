@@ -69,9 +69,10 @@ public final class Backend implements AutoCloseable {
     bgfx_set_debug(debugText ? BGFX_DEBUG_TEXT : BGFX_DEBUG_NONE);
     adapter = queryAdapter();
     DX12MC.LOGGER.info(
-        "bgfx initialized using {} on {}, vsync={}",
+        "bgfx initialized using {} on {} ({}), vsync={}",
         rendererName,
         adapter.name(),
+        adapter.logDetails(),
         swapChain.vsync());
   }
 
@@ -194,19 +195,23 @@ public final class Backend implements AutoCloseable {
     long caps = nbgfx_get_caps();
     int vendorId = Short.toUnsignedInt(BGFXCaps.nvendorId(caps));
     int deviceId = Short.toUnsignedInt(BGFXCaps.ndeviceId(caps));
-    String description = null;
+    DxgiAdapters.Details details = null;
     try {
-      description = DxgiAdapters.description(vendorId, deviceId);
-      if (description == null) {
+      details = DxgiAdapters.query(vendorId, deviceId);
+      if (details == null) {
         DX12MC.LOGGER.warn(
             "DXGI did not list the adapter bgfx opened ({}:{}); using its PCI ids as its name",
             Integer.toHexString(vendorId),
             Integer.toHexString(deviceId));
+      } else {
+        for (String problem : details.problems()) DX12MC.LOGGER.warn("{}", problem);
       }
     } catch (Throwable throwable) {
-      DX12MC.LOGGER.warn("Unable to read the Direct3D 12 adapter name from DXGI", throwable);
+      DX12MC.LOGGER.warn("Unable to read the Direct3D 12 adapter details from DXGI", throwable);
     }
-    return new Adapter(vendorId, deviceId, description);
+    if (details == null) return new Adapter(vendorId, deviceId, null);
+    return new Adapter(
+        vendorId, deviceId, details.description(), details.driverVersion(), details.featureLevel());
   }
 
   private static String rendererName(int type) {
