@@ -310,6 +310,9 @@ val compileD3D12Shaders by tasks.registering {
     group = "dx12mc verification"
     description = "Compiles every DX12MC D3D12 shader and reports all shader failures together."
     dependsOn(prepareShaderc, validateD3D12ShaderSources)
+    inputs.property("shadercSha256", findProperty("shaderc_sha256_$lwjglVersion") as String?)
+    inputs.property("shadercProfile", shadercProfile)
+    inputs.property("shadercOptimization", shadercOptimization)
     for (spec in shaderSpecs) {
         inputs.file(shaderSourceDir.file("${spec.name}.sc"))
     }
@@ -442,9 +445,8 @@ val installD3D12Shaders by tasks.registering(Sync::class) {
     into(installedShaderRoot)
 }
 
-tasks.jar {
-    dependsOn(installD3D12Shaders)
-    from(installedShaderRoot)
+sourceSets.main {
+    output.dir(mapOf("builtBy" to installD3D12Shaders), installedShaderRoot)
 }
 
 tasks.withType<JavaCompile>().configureEach {
