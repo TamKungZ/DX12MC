@@ -77,7 +77,16 @@ val shaderSpecs = listOf(
     ShaderSpec("vs_end_portal", "vertex", 'V'),
     ShaderSpec("fs_end_portal", "fragment", 'F'),
     ShaderSpec("fs_entity", "fragment", 'F'),
-    ShaderSpec("fs_entity_cutout", "fragment", 'F')
+    ShaderSpec("fs_entity_cutout", "fragment", 'F'),
+    ShaderSpec("vs_post", "vertex", 'V'),
+    ShaderSpec("fs_post_box_blur", "fragment", 'F'),
+    ShaderSpec("fs_post_entity_sobel", "fragment", 'F'),
+    ShaderSpec("fs_post_outline_blur", "fragment", 'F'),
+    ShaderSpec("fs_post_blit", "fragment", 'F'),
+    ShaderSpec("fs_post_invert", "fragment", 'F'),
+    ShaderSpec("fs_post_color_convolve", "fragment", 'F'),
+    ShaderSpec("fs_post_bits", "fragment", 'F'),
+    ShaderSpec("fs_post_spider", "fragment", 'F')
 )
 
 val prepareShaderc by tasks.registering {
@@ -243,7 +252,17 @@ val validateD3D12ShaderSources by tasks.registering {
             "vs_end_portal.sc" to "#include \"common.sh\"",
             "fs_end_portal.sc" to "#include \"texture.sh\"",
             "fs_entity.sc" to "#include \"texture.sh\"",
-            "fs_entity_cutout.sc" to "#include \"texture.sh\""
+            "fs_entity_cutout.sc" to "#include \"texture.sh\"",
+            "vs_post.sc" to "#include \"common.sh\"",
+            "post.sh" to "#include \"texture.sh\"",
+            "fs_post_box_blur.sc" to "#include \"post.sh\"",
+            "fs_post_entity_sobel.sc" to "#include \"post.sh\"",
+            "fs_post_outline_blur.sc" to "#include \"post.sh\"",
+            "fs_post_blit.sc" to "#include \"post.sh\"",
+            "fs_post_invert.sc" to "#include \"post.sh\"",
+            "fs_post_color_convolve.sc" to "#include \"post.sh\"",
+            "fs_post_bits.sc" to "#include \"post.sh\"",
+            "fs_post_spider.sc" to "#include \"post.sh\""
         )
         expectedIncludes.forEach { (name, include) ->
             val text = shaderSourceDir.file(name).asFile.readText()
@@ -278,6 +297,14 @@ val validateD3D12ShaderSources by tasks.registering {
             "(2.0 + layer / 1.5) * (u_portal.x * 1.5) * p.w", "xy * 0.5 + vec2_splat(0.25 * p.w)"))
         requireAll("vs_entity.sc", listOf(
             "SAMPLER2D(s_overlay, 1)", "dx12mcMixLight(u_lightDir0.xyz, u_lightDir1.xyz, normal, a_color0)"))
+        requireAll("post.sh", listOf("vec2(_glCoord.x, 1.0 - _glCoord.y)", "dx12mcTexture2DLevel("))
+        for (name in listOf("fs_post_box_blur.sc", "fs_post_entity_sobel.sc", "fs_post_outline_blur.sc",
+                "fs_post_blit.sc", "fs_post_invert.sc", "fs_post_color_convolve.sc", "fs_post_bits.sc",
+                "fs_post_spider.sc")) {
+            if (shaderSourceDir.file(name).asFile.readText().contains("discard")) {
+                throw GradleException("$name must not discard")
+            }
+        }
         val fragments = listOf(
             "fs_position_color.sc", "fs_position_color_alpha.sc", "fs_position_color_tex.sc",
             "fs_position_color_tex_cutout.sc", "fs_entity.sc", "fs_entity_cutout.sc")
@@ -319,6 +346,7 @@ val compileD3D12Shaders by tasks.registering {
     inputs.file(shaderSourceDir.file("varying.def.sc"))
     inputs.file(shaderSourceDir.file("common.sh"))
     inputs.file(shaderSourceDir.file("texture.sh"))
+    inputs.file(shaderSourceDir.file("post.sh"))
     outputs.dir(generatedShaderDir)
     doLast {
         val varyingFile = shaderSourceDir.file("varying.def.sc").asFile
