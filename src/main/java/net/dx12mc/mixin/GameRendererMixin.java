@@ -24,13 +24,6 @@ public abstract class GameRendererMixin {
     }
   }
 
-  @Inject(method = "processBlurEffect(F)V", at = @At("HEAD"), cancellable = true)
-  private void dx12mc$suppressLegacyBlur(float partialTick, CallbackInfo ci) {
-    if (DX12MC.runtime().suppressLegacyBlurPostProcess()) {
-      ci.cancel();
-    }
-  }
-
   @Inject(
       method = "takeAutoScreenshot(Ljava/nio/file/Path;)V",
       at =
