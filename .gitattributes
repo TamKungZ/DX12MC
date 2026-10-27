@@ -1,2 +1,2 @@
-src/main/shaders/*.sc linguist-language=GLSL
-src/main/shaders/*.sh linguist-language=GLSL
+src/main/shaders/*.sc -linguist-detectable
+src/main/shaders/*.sh -linguist-detectable
