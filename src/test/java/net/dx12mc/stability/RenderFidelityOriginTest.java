@@ -164,7 +164,7 @@ class RenderFidelityOriginTest {
   }
 
   @Test
-  void offscreenTargetDrawsAndGlPostChainsAreKeptOffTheBackbuffer() throws IOException {
+  void offscreenTargetDrawsAndPostChainsRunOnNativeTargets() throws IOException {
     assertTrue(
         withoutDescriptors(callersOf(RENDER_TARGET + ".bindWrite(Z)V"))
             .contains("net/minecraft/client/renderer/RenderStateShard.<clinit>"),
@@ -175,12 +175,23 @@ class RenderFidelityOriginTest {
     assertTrue(
         withoutDescriptors(callersOf(POST_CHAIN + ".process(F)V"))
             .contains(LEVEL_RENDERER + ".renderLevel"));
+    assertTrue(
+        withoutDescriptors(callersOf(RENDER_TARGET + ".blitToScreen(IIZ)V"))
+            .contains(LEVEL_RENDERER + ".doEntityOutline"),
+        "the entity outline target is composited by RenderTarget.blitToScreen");
     String target = read("mixin/RenderTargetMixin.java");
+    assertTrue(target.contains("DX12MC.runtime().bindRenderTarget((RenderTarget) (Object) this)"));
+    assertTrue(target.contains("DX12MC.runtime().bindRenderTarget(null)"));
+    assertTrue(target.contains("releaseRenderTarget((RenderTarget) (Object) this)"));
+    assertTrue(target.contains("blitRenderTarget((RenderTarget) (Object) this, disableBlend)"));
     assertTrue(target.contains("(Object) this == minecraft.getMainRenderTarget()"));
-    assertTrue(target.contains("DX12MC.runtime().bindRenderTarget(true)"));
-    assertTrue(read("mixin/PostChainMixin.java").contains("method = \"process(F)V\""));
+    String chain = read("mixin/PostChainMixin.java");
+    assertTrue(chain.contains("method = \"process(F)V\""));
+    assertTrue(chain.contains("processPostChain((PostChain) (Object) this, partialTick)"));
     String controller = read("render/Controller.java");
-    assertTrue(controller.contains("if (offscreenTargetBound && lifecycle.active()) return true;"));
+    assertFalse(controller.contains("offscreenTargetBound"));
+    assertTrue(controller.contains("private void syncTarget()"));
+    assertTrue(controller.contains("deferClear(boundTarget, mask)"));
   }
 
   @Test
