@@ -46,6 +46,7 @@ final class PixelCheck {
       check.create();
       check.handDepthClear();
       check.guiAlphaDiscardWithBlendOff();
+      check.tintedGuiTextureRepeatsLikeTheMenuBackground();
       check.linearFog();
       check.terrainLightmapIsFilteredAndEntityLightmapIsFetched();
       check.entityDiffuseLight();
@@ -53,6 +54,7 @@ final class PixelCheck {
       check.screenSpaceLineCoversItsWidth();
       check.debugLinePrimitiveIsRasterised();
       check.textHighlightOrReverseLogicOp();
+      check.endPortalLayersReproduceTheVanillaShader();
       check.screenCaptureReturnsThePresentedBackbuffer();
       check.measureFullHdScreenCapture();
       return check.failures;
@@ -71,6 +73,42 @@ final class PixelCheck {
     draw(quad(0.2f, 0xFF0000FF), colorContext());
     draw(quad(0.8f, 0x00FF00FF), colorContext());
     expect("without the clear the farther quad is hidden", 255, 0, 0, read());
+  }
+
+  private void tintedGuiTextureRepeatsLikeTheMenuBackground() {
+    int[][] tiles = {{200, 40, 40}, {40, 200, 40}, {40, 40, 200}, {200, 200, 40}};
+    Texture texture = Texture.create(2, 2, 0);
+    try {
+      texture.sampler(BGFX_SAMPLER_POINT, 0.0f);
+      texture.update(0, 0, 0, 2, 2, tiles(tiles));
+      begin(0x000000FF);
+      state.blend(true);
+      state.blendFuncSeparate(0x0302, 0x0303, 1, 0x0303);
+      state.depthTest(false);
+      ShaderSemantics gui = ShaderSemantics.of("position_tex");
+      DrawContext tinted = textureContext(texture, gui);
+      java.util.Arrays.fill(tinted.tint(), 0, 3, 0.5f);
+      float[] positions = {-1, -1, 0.5f, 1, -1, 0.5f, 1, 1, 0.5f, -1, 1, 0.5f};
+      float[] uv0 = {0.25f, 0, 2.25f, 0, 2.25f, 2, 0.25f, 2};
+      draw(batch(positions, 0xFFFFFFFF, uv0, null, null, null), tinted);
+      readFrame();
+      for (int[] probe : new int[][] {{6, 6}, {22, 6}, {38, 6}, {6, 22}, {50, 54}, {22, 38}}) {
+        double u = 0.25 + 2.0 * (probe[0] + 0.5) / SIZE;
+        double v = 2.0 * (1.0 - (probe[1] + 0.5) / SIZE);
+        int[] tile =
+            tiles[
+                (int) Math.floor((v - Math.floor(v)) * 2.0) * 2
+                    + (int) Math.floor((u - Math.floor(u)) * 2.0)];
+        expect(
+            "tinted repeated GUI texture at " + probe[0] + "," + probe[1],
+            Math.round(tile[0] * 0.5f),
+            Math.round(tile[1] * 0.5f),
+            Math.round(tile[2] * 0.5f),
+            pixel(probe[0], probe[1]));
+      }
+    } finally {
+      texture.close();
+    }
   }
 
   private void guiAlphaDiscardWithBlendOff() {
@@ -293,6 +331,93 @@ final class PixelCheck {
       } else {
         expect("a zero-alpha highlight is discarded by both passes", 0x33, 0x66, 0x99, read());
       }
+    }
+  }
+
+  private void endPortalLayersReproduceTheVanillaShader() {
+    double[][] colors = vanillaEndPortalColors();
+    int[][] sky = {{60, 10, 10}, {10, 60, 10}, {10, 10, 60}, {60, 60, 10}};
+    int[][] portal = {{80, 80, 80}, {10, 10, 10}, {80, 40, 0}, {0, 40, 80}};
+    Texture skyTexture = Texture.create(2, 2, 0);
+    Texture portalTexture = Texture.create(2, 2, 0);
+    try {
+      skyTexture.sampler(BGFX_SAMPLER_POINT, 0.0f);
+      portalTexture.sampler(BGFX_SAMPLER_POINT, 0.0f);
+      skyTexture.update(0, 0, 0, 2, 2, tiles(sky));
+      portalTexture.update(0, 0, 0, 2, 2, tiles(portal));
+      int[][] probes = {{8, 8}, {20, 45}, {33, 17}, {50, 50}, {5, 58}, {40, 3}, {60, 30}};
+      float gameTime = 0.37f;
+      for (String program : new String[] {"rendertype_end_portal", "rendertype_end_gateway"}) {
+        ShaderSemantics semantics = ShaderSemantics.of(program);
+        begin(0x000000FF);
+        state.depthTest(false);
+        reset(context, semantics);
+        ShaderInputs.portal(semantics, gameTime, context.portalParams());
+        context.set(
+            DrawContext.Kind.END_PORTAL,
+            skyTexture,
+            null,
+            portalTexture,
+            false,
+            state.snapshot(SIZE, SIZE));
+        draw(quad(0.5f, 0xFFFFFFFF), context);
+        readFrame();
+        for (int[] probe : probes) {
+          double[] expected =
+              EndPortalReference.color(
+                  colors,
+                  sky,
+                  portal,
+                  semantics.endPortalLayers(),
+                  gameTime,
+                  probe[0],
+                  probe[1],
+                  SIZE);
+          expect(
+              program + " layers at " + probe[0] + "," + probe[1],
+              (int) Math.round(expected[0] * 255.0),
+              (int) Math.round(expected[1] * 255.0),
+              (int) Math.round(expected[2] * 255.0),
+              pixel(probe[0], probe[1]));
+        }
+      }
+    } finally {
+      skyTexture.close();
+      portalTexture.close();
+    }
+  }
+
+  private static byte[] tiles(int[][] rgb) {
+    byte[] texels = new byte[rgb.length * 4];
+    for (int tile = 0; tile < rgb.length; tile++) {
+      texels[tile * 4] = (byte) rgb[tile][0];
+      texels[tile * 4 + 1] = (byte) rgb[tile][1];
+      texels[tile * 4 + 2] = (byte) rgb[tile][2];
+      texels[tile * 4 + 3] = -1;
+    }
+    return texels;
+  }
+
+  static double[][] vanillaEndPortalColors() {
+    try {
+      String source =
+          java.nio.file.Files.readString(
+              java.nio.file.Path.of("src", "main", "shaders", "fs_end_portal.sc"));
+      java.util.regex.Matcher matcher =
+          java.util.regex.Pattern.compile("vec3[(]([0-9.]+), ([0-9.]+), ([0-9.]+)[)]")
+              .matcher(source);
+      java.util.List<double[]> colors = new java.util.ArrayList<>();
+      while (matcher.find()) {
+        colors.add(
+            new double[] {
+              Double.parseDouble(matcher.group(1)),
+              Double.parseDouble(matcher.group(2)),
+              Double.parseDouble(matcher.group(3))
+            });
+      }
+      return colors.toArray(new double[0][]);
+    } catch (java.io.IOException exception) {
+      throw new IllegalStateException(exception);
     }
   }
 
