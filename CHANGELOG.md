@@ -4,16 +4,22 @@ Note: 0.9.0 is the version that fixes the low FPS problem. On a GT1030 it perfor
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
+## 0.11.2 - Minecraft 1.20.1 build
+
+- Add a Minecraft 1.20.1 build, `0.11.2+mc1.20.1`, ported from the 1.21.1 code. It targets 1.20.1 only, and Gradle runs on JDK 21 while a Java 17 toolchain compiles the mod.
+- Take the shader table, uniform inputs and vertex formats from the vanilla 1.20.1 sources. Seven core programs that 1.20.1 has were added to the table (`position_color_normal`, `position_color_tex`, `position_tex_color_normal`, `position_tex_lightmap_color`, `rendertype_armor_glint`, `rendertype_glint_direct`, `rendertype_translucent_no_crumbling`) and the two it does not have (`rendertype_clouds`, `rendertype_breeze_wind`) were removed. Clouds use `position_tex_color_normal`.
+- Compute fog distance the way the 1.20.1 vertex shaders do: `fog_distance` applies the model-view matrix, and entity and text shaders first apply the inverse view rotation. The shaders get the matrix through a new `u_fogView` uniform.
+- Menu Background Blur does not exist in 1.20.1, so the menu blur hook and option handling are not part of this build. The End Poem background is a plain textured screen there, so the End Poem change from 0.11.1 does not apply.
+- Rebuild the compiled D3D12 shaders when the pinned shaderc hash or shader profile changes.
+- Put the compiled shaders on the main output, so a development run (`runClient`) finds them as well as the jar.
+- Run Gradle in the `build.yml` workflow on the runner JDK with `-Dorg.gradle.java.home`, the same as `publish.yml`.
+
 ## 0.11.1 - End portal and End Poem background
 
 - Draw the end portal and the end gateway with a port of the vanilla `rendertype_end_portal` shader instead of a plain white fill. The shader layers the end sky and end portal textures with Minecraft's per-layer colours, rotation, scale and game-time scroll (15 layers for the portal, 16 for the gateway). Previously these draws had no texture coordinates, so they fell back to the plain colour program and came out solid white.
 - The End Poem screen draws its background with the same render type, so it uses the same fix.
 - Add `rendertype_end_gateway` to the vanilla shader table; before it fell back to the default entry.
 - F3, crash reports and the log now include the graphics driver version and the Direct3D feature level of the adapter bgfx opened. Both are read once at startup from DXGI and the Direct3D 12 device; NVIDIA's four-part driver number is shown in its usual form, other vendors show the raw version, and a value that cannot be read is left out.
-- Add a Minecraft 1.20.1 build, `0.11.1+mc1.20.1`, ported from the 1.21.1 code. It targets 1.20.1 only, and Gradle runs on JDK 21 while a Java 17 toolchain compiles the mod.
-- Take the shader table, uniform inputs and vertex formats from the vanilla 1.20.1 sources. Seven core programs that 1.20.1 has were added to the table (`position_color_normal`, `position_color_tex`, `position_tex_color_normal`, `position_tex_lightmap_color`, `rendertype_armor_glint`, `rendertype_glint_direct`, `rendertype_translucent_no_crumbling`) and the two it does not have (`rendertype_clouds`, `rendertype_breeze_wind`) were removed. Clouds use `position_tex_color_normal`.
-- Compute fog distance the way the 1.20.1 vertex shaders do: `fog_distance` applies the model-view matrix, and entity and text shaders first apply the inverse view rotation. The shaders get the matrix through a new `u_fogView` uniform.
-- Menu Background Blur does not exist in 1.20.1, and the End Poem background is a plain textured screen there, so the menu blur hook and the End Poem item above do not apply to this build.
 
 ## 0.11.0 - Smaller vertices and release publishing
 
