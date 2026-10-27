@@ -39,7 +39,10 @@ class ShaderSemanticsTest {
                     program.getKey(),
                     () ->
                         assertEquals(
-                            derive(program.getValue()[0], program.getValue()[1]),
+                            derive(
+                                program.getValue()[0],
+                                program.getValue()[1],
+                                program.getValue()[2]),
                             ShaderSemantics.VANILLA.get(program.getKey()))));
   }
 
@@ -54,12 +57,26 @@ class ShaderSemanticsTest {
   }
 
   @Test
+  void endPortalAndGatewayShareOneShaderAndDifferOnlyInLayerCount() {
+    ShaderSemantics portal = ShaderSemantics.of("rendertype_end_portal");
+    ShaderSemantics gateway = ShaderSemantics.of("rendertype_end_gateway");
+    assertTrue(portal.endPortal());
+    assertTrue(gateway.endPortal());
+    assertEquals(15, portal.endPortalLayers());
+    assertEquals(16, gateway.endPortalLayers());
+    assertEquals(ShaderSemantics.FogMode.NONE, portal.fogMode());
+    assertFalse(portal.discards());
+    assertFalse(ShaderSemantics.of("rendertype_solid").endPortal());
+    assertTrue(ShaderSemantics.isVanilla("rendertype_end_gateway"));
+  }
+
+  @Test
   void cutoutMippedUsesTheVanillaHalfThreshold() {
     assertEquals(0.5f, ShaderSemantics.of("rendertype_cutout_mipped").alphaTest().threshold());
     assertEquals(0.1f, ShaderSemantics.of("rendertype_cutout").alphaTest().threshold());
   }
 
-  static ShaderSemantics derive(String vertex, String fragment) {
+  static ShaderSemantics derive(String vertex, String fragment, String json) {
     Matcher matcher = ALPHA_TEST.matcher(fragment);
     ShaderSemantics.AlphaTest alpha = ShaderSemantics.AlphaTest.NONE;
     boolean testsTexture = false;
@@ -105,7 +122,16 @@ class ShaderSemanticsTest {
         vertex.contains("texelFetch(Sampler1, UV1, 0)") && fragment.contains("overlayColor"),
         fragment.contains(".rrrr"),
         fragment.contains("GlintAlpha"),
-        vertex.contains("uniform float LineWidth;"));
+        vertex.contains("uniform float LineWidth;"),
+        endPortalLayers(fragment, json));
+  }
+
+  private static int endPortalLayers(String fragment, String json) {
+    if (!fragment.contains("uniform int EndPortalLayers;")) return 0;
+    Matcher layers =
+        Pattern.compile("\"EndPortalLayers\".*?\"values\": [\\[] *([0-9]+)").matcher(json);
+    assertTrue(layers.find(), "EndPortalLayers value in the program json");
+    return Integer.parseInt(layers.group(1));
   }
 
   private static Map<String, String[]> vanillaPrograms() throws Exception {
@@ -115,12 +141,25 @@ class ShaderSemanticsTest {
       Enumeration<JarEntry> entries = file.entries();
       while (entries.hasMoreElements()) {
         String name = entries.nextElement().getName();
-        if (!name.startsWith(CORE) || !name.endsWith(".vsh")) continue;
-        String program = name.substring(CORE.length(), name.length() - 4);
-        programs.put(program, new String[] {read(file, name), read(file, CORE + program + ".fsh")});
+        if (!name.startsWith(CORE) || !name.endsWith(".json")) continue;
+        String program = name.substring(CORE.length(), name.length() - 5);
+        String json = read(file, name);
+        String vertex = shaderFile(json, "vertex");
+        String fragment = shaderFile(json, "fragment");
+        programs.put(
+            program,
+            new String[] {
+              read(file, CORE + vertex + ".vsh"), read(file, CORE + fragment + ".fsh"), json
+            });
       }
     }
     return programs;
+  }
+
+  private static String shaderFile(String json, String stage) {
+    Matcher matcher = Pattern.compile("\"" + stage + "\": \"([a-z_0-9]+)\"").matcher(json);
+    assertTrue(matcher.find(), stage + " in the program json");
+    return matcher.group(1);
   }
 
   private static String read(JarFile file, String name) throws IOException {
