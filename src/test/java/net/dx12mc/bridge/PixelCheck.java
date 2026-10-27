@@ -57,7 +57,7 @@ final class PixelCheck {
       check.endPortalLayersReproduceTheVanillaShader();
       check.screenCaptureReturnsThePresentedBackbuffer();
       check.measureFullHdScreenCapture();
-      return check.failures;
+      return check.failures + PostPixelCheck.run(backend, pipelines);
     } finally {
       check.close();
     }
@@ -517,7 +517,7 @@ final class PixelCheck {
     draw(quad(-1.0f, 0.0f, 0.5f, quadRgba), topLeft(colorContext()));
   }
 
-  private static DrawContext topLeft(DrawContext context) {
+  static DrawContext topLeft(DrawContext context) {
     new Matrix4f().translation(0.0f, 1.0f, 0.0f).get(context.matrix());
     return context;
   }
@@ -603,7 +603,7 @@ final class PixelCheck {
         state.snapshot(SIZE, SIZE));
   }
 
-  private static void reset(DrawContext context, ShaderSemantics semantics) {
+  static void reset(DrawContext context, ShaderSemantics semantics) {
     new Matrix4f().get(context.matrix());
     new Matrix4f().get(context.textureMatrix());
     new Matrix4f().get(context.fogModel());
@@ -620,7 +620,7 @@ final class PixelCheck {
     return quad(-1.0f, 1.0f, z, rgba);
   }
 
-  private static Batch quad(float min, float max, float z, int rgba) {
+  static Batch quad(float min, float max, float z, int rgba) {
     float[] positions = {min, min, z, max, min, z, max, max, z, min, max, z};
     return batch(positions, rgba, null, null, null, null);
   }
@@ -653,7 +653,7 @@ final class PixelCheck {
     return batch(positions, 0xFFFFFFFF, uv0, new short[8], lightUv, normals);
   }
 
-  private static Batch batch(
+  static Batch batch(
       float[] positions, int rgba, float[] uv0, short[] uv1, short[] uv2, byte[] normals) {
     int[] colors = {rgba, rgba, rgba, rgba};
     return new Batch(
