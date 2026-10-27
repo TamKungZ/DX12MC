@@ -4,6 +4,12 @@ Note: 0.9.0 is the version that fixes the low FPS problem. On a GT1030 it perfor
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
+## 0.11.1 - End portal and End Poem background
+
+- Draw the end portal and the end gateway with a port of the vanilla `rendertype_end_portal` shader instead of a plain white fill. The shader layers the end sky and end portal textures with Minecraft's per-layer colours, rotation, scale and game-time scroll (15 layers for the portal, 16 for the gateway). Previously these draws had no texture coordinates, so they fell back to the plain colour program and came out solid white.
+- The End Poem screen draws its background with the same render type, so it uses the same fix.
+- Add `rendertype_end_gateway` to the vanilla shader table; before it fell back to the default entry.
+
 ## 0.11.0 - Smaller vertices and release publishing
 
 - Store vertex light coordinates (UV2) as 16-bit integers instead of 32-bit floats. Terrain, GUI and other non-entity vertices shrink from 32 to 28 bytes, and entity and line vertices from 44 to 40 bytes. The shaders read the same unsigned values as before, so the rendered output does not change. In the new `renderBench` frame scenario on a GT 1030, GPU frame time went from 3.36 ms to 3.30 ms. This is a benchmark result, not an in-game measurement.
