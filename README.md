@@ -19,7 +19,9 @@ The overlay is a developer tool, enabled with `-Ddx12mc.overlay=true`.
 
 Geometry, textures, render state and shaders that Minecraft normally sends to OpenGL go to Direct3D 12 instead. Terrain, entities, text, fog, block outlines, the end portal and screenshots are drawn this way, and Video Settings and F3 report the Direct3D 12 backend.
 
-It is not a complete OpenGL replacement. There are no native render targets yet, so menu background blur is missing, the Fabulous graphics mode is not offered, and OpenGL post-processing effects such as spectator effects and glowing outlines are skipped. Panorama and other offscreen screenshots do not work. If something needs a path that does not exist yet, the mod stops with an error instead of falling back to OpenGL.
+Offscreen render targets and post-processing run on Direct3D 12, which covers menu background blur, glowing outlines and the creeper, spider and enderman spectator effects.
+
+It is not a complete OpenGL replacement. The Fabulous graphics mode is not offered, and panorama and other offscreen screenshots do not work. If something needs a path that does not exist yet, the mod stops with an error instead of falling back to OpenGL.
 
 See `ARCHITECTURE.md` for a source-level overview.
 
