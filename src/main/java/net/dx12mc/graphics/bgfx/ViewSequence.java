@@ -21,6 +21,10 @@ public final class ViewSequence {
     used = true;
   }
 
+  static boolean isUsed() {
+    return used;
+  }
+
   static void reset() {
     current = Backend.MAIN_VIEW;
     used = false;
@@ -32,7 +36,7 @@ public final class ViewSequence {
     return true;
   }
 
-  private static void advance() {
+  static void advance() {
     if (current + 1 >= MAX_VIEWS) {
       throw new IllegalStateException(
           "DX12MC needs more than " + MAX_VIEWS + " bgfx views for the clears of one frame");
