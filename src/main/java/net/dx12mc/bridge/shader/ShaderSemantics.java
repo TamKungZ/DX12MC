@@ -13,7 +13,33 @@ public record ShaderSemantics(
     boolean overlay,
     boolean intensity,
     boolean glintAlpha,
-    boolean screenSpaceLines) {
+    boolean screenSpaceLines,
+    int endPortalLayers) {
+
+  public ShaderSemantics(
+      AlphaTest alphaTest,
+      boolean alphaTestsTexture,
+      FogMode fogMode,
+      FogSpace fogSpace,
+      Lightmap lightmap,
+      boolean diffuseLighting,
+      boolean overlay,
+      boolean intensity,
+      boolean glintAlpha,
+      boolean screenSpaceLines) {
+    this(
+        alphaTest,
+        alphaTestsTexture,
+        fogMode,
+        fogSpace,
+        lightmap,
+        diffuseLighting,
+        overlay,
+        intensity,
+        glintAlpha,
+        screenSpaceLines,
+        0);
+  }
 
   public enum AlphaTest {
     NONE(-1.0f),
@@ -51,6 +77,10 @@ public record ShaderSemantics(
     NONE,
     FILTERED,
     FETCH
+  }
+
+  public boolean endPortal() {
+    return endPortalLayers > 0;
   }
 
   public boolean discards() {
@@ -176,7 +206,8 @@ public record ShaderSemantics(
           Map.entry("rendertype_crumbling", SEE_THROUGH),
           Map.entry("rendertype_cutout", TERRAIN_CUTOUT),
           Map.entry("rendertype_cutout_mipped", TERRAIN.withAlpha(AlphaTest.HALF, false)),
-          Map.entry("rendertype_end_portal", PLAIN),
+          Map.entry("rendertype_end_portal", PLAIN.withEndPortal(15)),
+          Map.entry("rendertype_end_gateway", PLAIN.withEndPortal(16)),
           Map.entry("rendertype_energy_swirl", SEE_THROUGH.withFog(FogMode.FADE)),
           Map.entry("rendertype_entity_alpha", PLAIN.withAlpha(AlphaTest.VERTEX_ALPHA, true)),
           Map.entry("rendertype_entity_cutout", ENTITY_CUTOUT),
@@ -248,7 +279,8 @@ public record ShaderSemantics(
         overlay,
         intensity,
         glintAlpha,
-        screenSpaceLines);
+        screenSpaceLines,
+        endPortalLayers);
   }
 
   private ShaderSemantics withFog(FogMode mode) {
@@ -266,7 +298,8 @@ public record ShaderSemantics(
         overlay,
         intensity,
         glintAlpha,
-        screenSpaceLines);
+        screenSpaceLines,
+        endPortalLayers);
   }
 
   private ShaderSemantics withLightmap(Lightmap mode) {
@@ -280,7 +313,8 @@ public record ShaderSemantics(
         overlay,
         intensity,
         glintAlpha,
-        screenSpaceLines);
+        screenSpaceLines,
+        endPortalLayers);
   }
 
   private ShaderSemantics withOverlay(boolean enabled) {
@@ -294,7 +328,8 @@ public record ShaderSemantics(
         enabled,
         intensity,
         glintAlpha,
-        screenSpaceLines);
+        screenSpaceLines,
+        endPortalLayers);
   }
 
   private ShaderSemantics withIntensity() {
@@ -308,7 +343,8 @@ public record ShaderSemantics(
         overlay,
         true,
         glintAlpha,
-        screenSpaceLines);
+        screenSpaceLines,
+        endPortalLayers);
   }
 
   private ShaderSemantics withScreenSpaceLines() {
@@ -322,6 +358,22 @@ public record ShaderSemantics(
         overlay,
         intensity,
         glintAlpha,
-        true);
+        true,
+        endPortalLayers);
+  }
+
+  private ShaderSemantics withEndPortal(int layers) {
+    return new ShaderSemantics(
+        alphaTest,
+        alphaTestsTexture,
+        fogMode,
+        fogSpace,
+        lightmap,
+        diffuseLighting,
+        overlay,
+        intensity,
+        glintAlpha,
+        screenSpaceLines,
+        layers);
   }
 }
