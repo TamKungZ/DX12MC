@@ -12,6 +12,8 @@ import net.dx12mc.graphics.bgfx.Backend;
 import net.dx12mc.graphics.bgfx.Probe;
 import net.dx12mc.graphics.bgfx.ProbeResult;
 import net.dx12mc.graphics.bgfx.ScreenCapture;
+import net.dx12mc.graphics.bgfx.Target;
+import net.dx12mc.graphics.pipeline.PostPipeline;
 import net.dx12mc.mixin.RenderSystemAccessor;
 import net.dx12mc.platform.win32.WindowHandle;
 import net.minecraft.client.Minecraft;
@@ -28,6 +30,8 @@ final class RendererLifecycle implements AutoCloseable {
   private FatalRenderException failure;
   private FrameSize currentFrameSize = new FrameSize(1, 1);
   private RendererInfo rendererInfo;
+  private Target frameMain;
+  private final float[] presentValues = new float[PostPipeline.UNIFORM_FLOATS];
 
   RendererLifecycle(Config config, Bridge bridge, Stats stats) {
     this.config = config;
@@ -85,13 +89,30 @@ final class RendererLifecycle implements AutoCloseable {
   }
 
   void ensureFrame(Minecraft minecraft) {
+    ensureFrame(minecraft, null);
+  }
+
+  boolean frameOpen() {
+    return frameOpen;
+  }
+
+  boolean mainRedirected() {
+    return frameOpen && frameMain != null;
+  }
+
+  void bindTarget(Target target) {
+    backend.bindTarget(target);
+  }
+
+  void ensureFrame(Minecraft minecraft, Target main) {
     throwIfFailed();
     if (frameOpen) return;
     if (state != State.ACTIVE) {
       throw new IllegalStateException("D3D12 frame requested while renderer state=" + state);
     }
     if (minecraft == null) throw new IllegalStateException("Minecraft instance is null");
-    backend.beginFrame(frameSize(minecraft.getWindow()));
+    backend.beginFrame(frameSize(minecraft.getWindow()), main);
+    frameMain = main;
     frameOpen = true;
   }
 
@@ -108,8 +129,13 @@ final class RendererLifecycle implements AutoCloseable {
       if (debug.shouldRender(config.mode(), config.overlay())) {
         debug.render(backend, size, config.mode(), stats.snapshot(), config.overlay());
       }
+      if (frameMain != null) {
+        backend.beginPresentView();
+        bridge.blitToBackbuffer(frameMain, presentValues);
+      }
       backend.endFrame();
       frameOpen = false;
+      frameMain = null;
       if (bridge != null) bridge.onFrameBoundary();
       performance.record(backend);
       stats.suppressedOpenGlSwap();
