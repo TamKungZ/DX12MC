@@ -7,6 +7,15 @@ import org.junit.jupiter.api.Test;
 class ShaderInputsTest {
 
   @Test
+  void portalInputsCarryGameTimeAndTheVanillaLayerCountOfTheProgram() {
+    float[] target = new float[4];
+    ShaderInputs.portal(ShaderSemantics.of("rendertype_end_portal"), 0.25f, target);
+    assertArrayEquals(new float[] {0.25f, 15.0f, 0.0f, 0.0f}, target);
+    ShaderInputs.portal(ShaderSemantics.of("rendertype_end_gateway"), 0.5f, target);
+    assertArrayEquals(new float[] {0.5f, 16.0f, 0.0f, 0.0f}, target);
+  }
+
+  @Test
   void terrainFogUsesVanillaStartEndShapeAndLinearMode() {
     float[] fog = new float[4];
     ShaderInputs.fog(ShaderSemantics.of("rendertype_solid"), 160.0f, 192.0f, 1, fog);
