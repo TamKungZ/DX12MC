@@ -50,7 +50,7 @@ The bridge is responsible for converting Minecraft render inputs into data the b
 - `bridge.shader` describes each vanilla core shader program (alpha test, fog mode and space, lightmap lookup, diffuse lighting, overlay) so the native programs reproduce it; a test checks the table against the shader sources in the Minecraft jar.
 - `bridge.state` tracks Minecraft render state separately from the bgfx bit encoder and scissor conversion.
 - `DrawContextFactory` resolves per-draw matrices, shader semantics, textures, and state without allocating on the steady-state path.
-- `graphics.pipeline.PipelineSet` owns pipeline resources and routes draws to the colour, texture, lightmapped or entity pipeline, each with an alpha-test variant. Opaque programs never discard, so they keep early depth testing.
+- `graphics.pipeline.PipelineSet` owns pipeline resources and routes draws to the colour, texture, lightmapped, entity, line or end-portal pipeline, each with an alpha-test variant. The end-portal pipeline evaluates the vanilla end portal and end gateway layers from the game time and binds both of their textures. Opaque programs never discard, so they keep early depth testing.
 - Minecraft's mid-frame clears start a new sequential bgfx view on the backbuffer with the requested clear flags.
 - Screenshots replace Minecraft's OpenGL readback with a bgfx screenshot of the last presented frame, then let Minecraft's own code save it.
 - `Bridge` is the native-rendering facade and coordinates draw submission across these components.
