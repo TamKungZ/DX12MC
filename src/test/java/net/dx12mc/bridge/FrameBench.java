@@ -201,6 +201,10 @@ final class FrameBench {
     particles(fog);
     pass("clouds");
     clouds(fog);
+    if (Boolean.getBoolean("bench.portal")) {
+      pass("portal");
+      endPortal();
+    }
     backend.clear(ViewSequence.GL_DEPTH_BUFFER_BIT, 0, 1.0f);
     pass("hand");
     hand();
@@ -442,6 +446,26 @@ final class FrameBench {
         .scale(0.4f)
         .get(context.matrix());
     draw(handMesh, context);
+  }
+
+  private void endPortal() {
+    ShaderSemantics semantics = ShaderSemantics.of("rendertype_end_gateway");
+    RenderState state = new RenderState();
+    state.depthTest(false);
+    DrawContext context = new DrawContext();
+    prepare(context, semantics, new float[4], 0.0f, 1.0f, 0);
+    ShaderInputs.portal(semantics, 0.3f, context.portalParams());
+    context.set(
+        DrawContext.Kind.END_PORTAL,
+        cloudTexture,
+        null,
+        entityTexture,
+        false,
+        state.snapshot(WIDTH, HEIGHT));
+    new Matrix4f().m22(0.5f).m32(0.5f).get(context.matrix());
+    draw(
+        plain(new float[] {-1, -1, 0.5f, 1, -1, 0.5f, 1, 1, 0.5f, -1, 1, 0.5f}, 0xFFFFFFFF),
+        context);
   }
 
   private void gui() {
