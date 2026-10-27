@@ -42,6 +42,8 @@ jobs:
           if (-not ("$response" -match 'HTTP 404')) {
             throw "Could not check for an existing release: $response"
           }
+          # The expected 404 leaves $LASTEXITCODE at 1, which pwsh would return as the step's exit code.
+          exit 0
 
       - name: Check out the tagged commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
