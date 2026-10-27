@@ -1,5 +1,6 @@
 package net.dx12mc.bridge;
 
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.VertexBuffer;
@@ -8,13 +9,16 @@ import net.dx12mc.bridge.mesh.Batch;
 import net.dx12mc.bridge.mesh.Encoder;
 import net.dx12mc.bridge.mesh.MeshStore;
 import net.dx12mc.bridge.mesh.SectionRegionBatcher;
+import net.dx12mc.bridge.target.Targets;
 import net.dx12mc.bridge.texture.Registry;
 import net.dx12mc.bridge.texture.TextureNotReadyException;
 import net.dx12mc.graphics.bgfx.Mesh;
 import net.dx12mc.graphics.bgfx.Packing;
 import net.dx12mc.graphics.bgfx.StagingBackpressureException;
+import net.dx12mc.graphics.bgfx.Target;
 import net.dx12mc.graphics.bgfx.TransientPressure;
 import net.dx12mc.graphics.pipeline.PipelineSet;
+import net.dx12mc.graphics.pipeline.PostPipeline;
 import org.joml.Matrix4f;
 
 public final class Bridge implements AutoCloseable {
@@ -26,6 +30,8 @@ public final class Bridge implements AutoCloseable {
   private final Registry textures;
   private final DrawContextFactory contexts;
   private final PipelineSet pipelines = new PipelineSet();
+  private final PostPipeline post = new PostPipeline();
+  private final Targets targets = new Targets();
   private final Encoder.Scratch immediateScratch = new Encoder.Scratch();
   private DrawContext activeSectionContext;
   private String semanticIntent = "frame";
@@ -42,7 +48,48 @@ public final class Bridge implements AutoCloseable {
 
   public void start() {
     pipelines.start();
+    post.start();
     textures.start();
+  }
+
+  public Target target(RenderTarget renderTarget) {
+    return targets.resolve(
+        renderTarget.getColorTextureId(),
+        renderTarget.width,
+        renderTarget.height,
+        renderTarget.useDepth);
+  }
+
+  public Target findTarget(int colorTextureId) {
+    return targets.find(colorTextureId);
+  }
+
+  public void blitToBackbuffer(Target source, float[] values) {
+    java.util.Arrays.fill(values, 0.0f);
+    values[0] = values[2] = source.width();
+    values[1] = values[3] = source.height();
+    values[4] = values[5] = values[6] = values[7] = 1.0f;
+    if (!post.draw(
+        PostPipeline.Effect.BLIT,
+        source.colorTexture(),
+        org.lwjgl.bgfx.BGFX.BGFX_INVALID_HANDLE,
+        false,
+        values,
+        post.blendState(false, false))) {
+      throw unsupported("bgfx/D3D12 rejected the final blit of the redirected main target");
+    }
+  }
+
+  public void releaseTarget(RenderTarget renderTarget) {
+    targets.release(renderTarget.getColorTextureId());
+  }
+
+  public PostPipeline post() {
+    return post;
+  }
+
+  public long blitState(boolean disableBlend) {
+    return contexts.state().blitState(disableBlend);
   }
 
   public void capture(Slot slot, BufferBuilder.RenderedBuffer mesh, VertexBuffer.Usage usage) {
@@ -419,6 +466,7 @@ public final class Bridge implements AutoCloseable {
     regions.onFrameBoundary();
     meshes.onFrameBoundary();
     textures.onFrameBoundary();
+    targets.onFrameBoundary();
     stats.nativeStaging(
         net.dx12mc.graphics.bgfx.StagingMemory.outstandingBytes(),
         net.dx12mc.graphics.bgfx.StagingMemory.peakBytes());
@@ -433,7 +481,8 @@ public final class Bridge implements AutoCloseable {
   @Override
   public void close() {
     RuntimeException failure = null;
-    for (AutoCloseable resource : new AutoCloseable[] {regions, meshes, textures, pipelines}) {
+    for (AutoCloseable resource :
+        new AutoCloseable[] {regions, meshes, textures, targets, post, pipelines}) {
       try {
         resource.close();
       } catch (Exception exception) {
