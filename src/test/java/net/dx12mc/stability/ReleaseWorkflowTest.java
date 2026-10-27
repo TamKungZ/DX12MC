@@ -27,8 +27,8 @@ class ReleaseWorkflowTest {
   @Test
   void runsForReleaseTagsOrARepeatedTagWithMinimalPermissions() throws IOException {
     String text = workflow();
-    assertTrue(text.contains("- '[0-9]*.[0-9]*.[0-9]*[+]mc*'"));
-    assertTrue(text.contains("- 'v[0-9]*.[0-9]*.[0-9]*[+]mc*'"));
+    assertTrue(text.contains("- '[0-9]*.[0-9]*.[0-9]*\\+mc*'"));
+    assertTrue(text.contains("- 'v[0-9]*.[0-9]*.[0-9]*\\+mc*'"));
     assertTrue(text.contains("workflow_dispatch:\n    inputs:\n      tag:"));
     assertTrue(text.contains("permissions:\n  contents: write\n  packages: write\n"));
     assertTrue(text.contains("ref: refs/tags/${{ env.RELEASE_TAG }}"));
@@ -72,6 +72,14 @@ class ReleaseWorkflowTest {
     assertTrue(
         build.contains("version = \"${prop(\"mod_version\")}+mc${prop(\"minecraft_version\")}\""));
     assertTrue(workflow().contains("$declared = \"$mod+mc$mc\""));
+  }
+
+  @Test
+  void bothWorkflowsRunGradleOnTheRunnerJdk() throws IOException {
+    for (String file : List.of("build.yml", "publish.yml")) {
+      String text = Files.readString(Path.of(".github", "workflows", file));
+      assertTrue(text.contains("-Dorg.gradle.java.home=$env:JAVA_HOME"), file);
+    }
   }
 
   @Test
