@@ -4,6 +4,10 @@ DX12MC is a client-side Fabric mod that routes selected Minecraft Java rendering
 
 The project is experimental and Windows-focused. It is not a general performance promise, compatibility layer, or replacement for Minecraft's renderer across every use case.
 
+<p align="center">
+  <img src="assets/dxmc-debug-overlay.png" alt="DXMC Debug Overlay" style="height: 200px; width: auto;">
+</p>
+
 ## Scope
 
 - Minecraft Java client mod for Fabric.
