@@ -4,6 +4,17 @@ Note: 0.9.0 is the version that fixes the low FPS problem. On a GT1030 it perfor
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
+## 0.12.0 - Native render targets and post-processing
+
+- Mirror Minecraft's offscreen render targets as bgfx frame buffers. A target gets a colour texture and, when Minecraft asked for one, a depth buffer the first time it is bound or sampled, and is released when Minecraft destroys it. Draws aimed at a target are drawn into it instead of being skipped, and clears of a target are applied to its own view. Before, every draw aimed at a render target other than the main one was dropped.
+- Run `PostChain.process` on Direct3D 12 instead of skipping it. The `box_blur`, `entity_outline`, `entity_outline_box_blur`, `blit`, `invert`, `color_convolve`, `bits` and `spider` programs are ported to D3D12 shaders, and each pass reads its uniform values from the vanilla program and post chain JSON. A chain with a program that has no port (Fabulous `transparency`) is skipped with a log line.
+- Enable Menu Background Blur again; its slider is no longer disabled. Frames that show a blur or a spectator effect draw the main target offscreen and copy it to the window at the end; all other frames are drawn as before.
+- Draw glowing entity outlines and the spectator effects (creeper, spider, enderman) again.
+- Fabulous graphics and panorama screenshots are still not supported. A saved Fabulous setting still loads as Fancy.
+- Make `rendertype_entity_alpha` (the ender dragon death beams) output the raw texture colour like the vanilla shader. Before, it multiplied in the vertex colour and the shader colour.
+- In the `renderBench` frame scenario on a GT 1030, alternating runs of this version and 0.11.2 gave 4.28 ms and 4.55 ms of GPU time on average, within the noise of the GPU clock, and the capture has no differing pixels. With the main target redirected and copied back the frame costs about 0.8 ms more, and with the six-pass blur about 4.5 ms more. These are benchmark results, not in-game measurements.
+- Add `renderBench` pixel checks for the render target round trip, box blur, entity outline mask, creeper and enderman colour passes, target resize, swap chain reset, closing a target twice and the redirected main frame, and `effect=` and `compare=` options for the frame scenario.
+
 ## 0.11.2 - Build fixes
 
 - Rebuild the compiled D3D12 shaders when the pinned shaderc hash, shader profile or optimization level changes. Before, a changed compiler left stale shader binaries in place because only the shader sources were tracked.
