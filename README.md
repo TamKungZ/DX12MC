@@ -3,20 +3,25 @@
   DX12MC
 </h1>
 
-DX12MC is a client-side Fabric mod that routes selected Minecraft Java rendering work through Direct3D 12 using bgfx.
+DX12MC (also called DXMC) is a client-side Fabric mod that renders Minecraft Java Edition with Direct3D 12 through bgfx instead of OpenGL.
 
-The project is experimental and Windows-focused. It is not a general performance promise, compatibility layer, or replacement for Minecraft's renderer across every use case.
+The project is experimental and Windows-focused. It is a hobby project made to learn how graphics rendering works, and it does not claim to be better than any other renderer or mod.
+
+Download: [Modrinth](https://modrinth.com/project/dx12mc) · [CurseForge](https://www.curseforge.com/projects/1768492)
 
 <p align="center">
   <img src="assets/dxmc-debug-overlay.png" alt="DXMC Debug Overlay" style="height: 200px; width: auto;">
 </p>
 
-## Scope
+The overlay is a developer tool, enabled with `-Ddx12mc.overlay=true`.
 
-- Minecraft Java client mod for Fabric.
-- Direct3D 12 backend through bgfx.
-- Rendering bridge work for geometry, textures, render state, shaders, and presentation.
-- Source-first development; see `ARCHITECTURE.md` for a source-level overview.
+## Status
+
+Geometry, textures, render state and shaders that Minecraft normally sends to OpenGL go to Direct3D 12 instead. Terrain, entities, text, fog, block outlines, the end portal and screenshots are drawn this way, and Video Settings and F3 report the Direct3D 12 backend.
+
+It is not a complete OpenGL replacement. There are no native render targets yet, so menu background blur is missing, the Fabulous graphics mode is not offered, and OpenGL post-processing effects such as spectator effects and glowing outlines are skipped. Panorama and other offscreen screenshots do not work. If something needs a path that does not exist yet, the mod stops with an error instead of falling back to OpenGL.
+
+See `ARCHITECTURE.md` for a source-level overview.
 
 ## License
 
