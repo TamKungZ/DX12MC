@@ -1,6 +1,6 @@
 package net.dx12mc.bridge.mesh;
 
-import com.mojang.blaze3d.vertex.MeshData;
+import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.VertexBuffer;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import java.nio.ByteBuffer;
@@ -41,14 +41,16 @@ public final class MeshStore implements AutoCloseable {
     this.stats = stats;
   }
 
-  public void capture(Slot slot, MeshData mesh, VertexBuffer.Usage usage, String shaderName) {
+  public void capture(
+      Slot slot, BufferBuilder.RenderedBuffer mesh, VertexBuffer.Usage usage, String shaderName) {
     forgetResident(slot);
     if (slot == null) throw unsupported("VertexBuffer slot is null");
-    if (mesh == null) throw unsupported("VertexBuffer upload supplied null MeshData");
+    if (mesh == null)
+      throw unsupported("VertexBuffer upload supplied null BufferBuilder.RenderedBuffer");
     Batch batch = Encoder.encode(mesh);
     stats.captured(batch);
     if (batch == null) {
-      MeshData.DrawState state = mesh.drawState();
+      BufferBuilder.DrawState state = mesh.drawState();
       Batch previous = slot.batch();
       if (previous != null) {
         cpuBytes = Math.max(0L, cpuBytes - previous.cpuBytes());
@@ -56,9 +58,12 @@ public final class MeshStore implements AutoCloseable {
       }
       slot.clearCpu();
       throw unsupported(
-          "Unsupported VertexBuffer MeshData: " + describe(state) + ", shader=" + shaderName);
+          "Unsupported VertexBuffer BufferBuilder.RenderedBuffer: "
+              + describe(state)
+              + ", shader="
+              + shaderName);
     }
-    MeshData.DrawState state = mesh.drawState();
+    BufferBuilder.DrawState state = mesh.drawState();
     long before = slot.batch() == null ? 0L : slot.batch().cpuBytes();
     slot.capture(batch, usage == VertexBuffer.Usage.DYNAMIC, state.indexType(), batch.indexCount());
     cpuBytes += batch.cpuBytes() - before;
@@ -248,7 +253,7 @@ public final class MeshStore implements AutoCloseable {
     stats.residentMeshes(residents.size(), residentBytes);
   }
 
-  private static String describe(MeshData.DrawState state) {
+  private static String describe(BufferBuilder.DrawState state) {
     if (state == null) return "drawState=null";
     return "mode="
         + state.mode()

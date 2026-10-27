@@ -1,9 +1,9 @@
 package net.dx12mc.client;
 
 import com.mojang.blaze3d.platform.NativeImage;
-import com.mojang.blaze3d.vertex.ByteBufferBuilder;
-import com.mojang.blaze3d.vertex.MeshData;
+import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.VertexBuffer;
+import java.nio.ByteBuffer;
 import java.util.function.Consumer;
 import net.dx12mc.bridge.Slot;
 import net.dx12mc.config.Config;
@@ -25,12 +25,12 @@ public final class Runtime implements AutoCloseable {
     controller.initialize();
   }
 
-  public void capture(Slot slot, MeshData mesh, VertexBuffer.Usage usage) {
+  public void capture(Slot slot, BufferBuilder.RenderedBuffer mesh, VertexBuffer.Usage usage) {
     controller.capture(slot, mesh, usage);
   }
 
-  public void updateIndices(Slot slot, ByteBufferBuilder.Result result) {
-    controller.updateIndices(slot, result);
+  public void updateIndices(Slot slot, ByteBuffer indices) {
+    controller.updateIndices(slot, indices);
   }
 
   public void beginLegacyVertexBufferUpload() {
@@ -83,7 +83,7 @@ public final class Runtime implements AutoCloseable {
     controller.endSectionLayer();
   }
 
-  public boolean drawImmediate(MeshData mesh) {
+  public boolean drawImmediate(BufferBuilder.RenderedBuffer mesh) {
     return controller.drawImmediate(mesh);
   }
 
@@ -245,10 +245,6 @@ public final class Runtime implements AutoCloseable {
 
   public boolean suppressLegacyOpenGlDriverWork() {
     return controller.suppressLegacyOpenGlDriverWork();
-  }
-
-  public boolean suppressLegacyBlurPostProcess() {
-    return controller.suppressLegacyBlurPostProcess();
   }
 
   public boolean ownsScreenCapture() {

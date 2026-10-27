@@ -1,7 +1,6 @@
 package net.dx12mc.mixin;
 
-import com.mojang.blaze3d.vertex.ByteBufferBuilder;
-import com.mojang.blaze3d.vertex.MeshData;
+import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.VertexBuffer;
 import net.dx12mc.DX12MC;
 import net.dx12mc.bridge.Slot;
@@ -23,19 +22,18 @@ public abstract class VertexBufferMixin {
   @Unique private Slot dx12mc$slot;
 
   @Inject(method = "upload", at = @At("HEAD"))
-  private void dx12mc$capture(MeshData mesh, CallbackInfo ci) {
-    DX12MC.runtime().capture(dx12mc$slot(), mesh, this.usage);
+  private void dx12mc$capture(BufferBuilder.RenderedBuffer mesh, CallbackInfo ci) {
+    if (mesh.drawState().indexOnly()) {
+      DX12MC.runtime().updateIndices(dx12mc$slot(), mesh.indexBuffer());
+    } else {
+      DX12MC.runtime().capture(dx12mc$slot(), mesh, this.usage);
+    }
     DX12MC.runtime().beginLegacyVertexBufferUpload();
   }
 
   @Inject(method = "upload", at = @At("RETURN"))
-  private void dx12mc$finishUpload(MeshData mesh, CallbackInfo ci) {
+  private void dx12mc$finishUpload(BufferBuilder.RenderedBuffer mesh, CallbackInfo ci) {
     DX12MC.runtime().endLegacyVertexBufferUpload();
-  }
-
-  @Inject(method = "uploadIndexBuffer", at = @At("HEAD"))
-  private void dx12mc$indices(ByteBufferBuilder.Result result, CallbackInfo ci) {
-    DX12MC.runtime().updateIndices(dx12mc$slot(), result);
   }
 
   @Inject(method = "draw()V", at = @At("HEAD"), cancellable = true)

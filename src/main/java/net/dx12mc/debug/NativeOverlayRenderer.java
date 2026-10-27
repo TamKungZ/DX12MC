@@ -202,8 +202,6 @@ final class NativeOverlayRenderer {
             + stats.suppressedOpenGlFramebufferBlitTotal());
     writer.line(0x0A, "OpenGL window swaps suppressed: " + stats.suppressedOpenGlSwapTotal());
     writer.line(
-        0x0A, "Legacy GL menu blur passes suppressed: " + stats.suppressedLegacyBlurTotal());
-    writer.line(
         0x0A,
         "Automatic world-icon GL readbacks suppressed: "
             + stats.suppressedAutomaticWorldIconCaptureTotal());

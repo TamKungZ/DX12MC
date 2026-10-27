@@ -4,6 +4,7 @@ import org.joml.Matrix4f;
 
 final class SectionRenderContext {
   private final Matrix4f layerClipTransform = new Matrix4f();
+  private final Matrix4f modelView = new Matrix4f();
   private final Matrix4f drawClipTransform = new Matrix4f();
   private boolean active;
   private boolean matricesValid;
@@ -24,6 +25,7 @@ final class SectionRenderContext {
       double cameraX,
       double cameraY,
       double cameraZ) {
+    this.modelView.set(modelView);
     layerClipTransform.identity().m22(0.5f).m32(0.5f).mul(projection).mul(modelView);
     this.framebufferWidth = framebufferWidth;
     this.framebufferHeight = framebufferHeight;
@@ -44,6 +46,10 @@ final class SectionRenderContext {
 
   Matrix4f drawClipTransform() {
     return drawClipTransform.set(layerClipTransform).translate(offsetX, offsetY, offsetZ);
+  }
+
+  Matrix4f modelView() {
+    return modelView;
   }
 
   Matrix4f layerClipTransform() {

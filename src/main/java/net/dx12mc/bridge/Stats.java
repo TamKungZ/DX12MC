@@ -21,9 +21,7 @@ public final class Stats {
       sectionLayerDrawTotal,
       scissorSkippedDrawTotal,
       rawOpenGlEscapeTotal;
-  private long suppressedOpenGlFramebufferBlitTotal,
-      suppressedOpenGlSwapTotal,
-      suppressedLegacyBlurTotal;
+  private long suppressedOpenGlFramebufferBlitTotal, suppressedOpenGlSwapTotal;
   private long suppressedAutomaticWorldIconCaptureTotal;
   private long omittedNativeLineOverlayTotal;
   private long residentMeshCurrent,
@@ -210,10 +208,6 @@ public final class Stats {
     suppressedOpenGlSwapTotal++;
   }
 
-  public void suppressedLegacyBlur() {
-    suppressedLegacyBlurTotal++;
-  }
-
   public void suppressedAutomaticWorldIconCapture() {
     suppressedAutomaticWorldIconCaptureTotal++;
   }
@@ -320,7 +314,6 @@ public final class Stats {
         rawOpenGlEscapeTotal,
         suppressedOpenGlFramebufferBlitTotal,
         suppressedOpenGlSwapTotal,
-        suppressedLegacyBlurTotal,
         suppressedAutomaticWorldIconCaptureTotal,
         omittedNativeLineOverlayTotal,
         residentMeshCurrent,
@@ -432,7 +425,6 @@ public final class Stats {
       long rawOpenGlEscapeTotal,
       long suppressedOpenGlFramebufferBlitTotal,
       long suppressedOpenGlSwapTotal,
-      long suppressedLegacyBlurTotal,
       long suppressedAutomaticWorldIconCaptureTotal,
       long omittedNativeLineOverlayTotal,
       long residentMeshCurrent,

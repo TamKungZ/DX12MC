@@ -1,6 +1,7 @@
 package net.dx12mc.mixin;
 
 import com.mojang.blaze3d.shaders.Uniform;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexBuffer;
 import net.dx12mc.DX12MC;
 import net.minecraft.client.Camera;
@@ -18,10 +19,10 @@ public abstract class LevelRendererMixin {
 
   @Inject(
       method =
-          "renderSky(Lorg/joml/Matrix4f;Lorg/joml/Matrix4f;FLnet/minecraft/client/Camera;ZLjava/lang/Runnable;)V",
+          "renderSky(Lcom/mojang/blaze3d/vertex/PoseStack;Lorg/joml/Matrix4f;FLnet/minecraft/client/Camera;ZLjava/lang/Runnable;)V",
       at = @At("HEAD"))
   private void dx12mc$beginSky(
-      Matrix4f modelView,
+      PoseStack poseStack,
       Matrix4f projection,
       float partialTick,
       Camera camera,
@@ -33,10 +34,10 @@ public abstract class LevelRendererMixin {
 
   @Inject(
       method =
-          "renderSky(Lorg/joml/Matrix4f;Lorg/joml/Matrix4f;FLnet/minecraft/client/Camera;ZLjava/lang/Runnable;)V",
+          "renderSky(Lcom/mojang/blaze3d/vertex/PoseStack;Lorg/joml/Matrix4f;FLnet/minecraft/client/Camera;ZLjava/lang/Runnable;)V",
       at = @At("RETURN"))
   private void dx12mc$endSky(
-      Matrix4f modelView,
+      PoseStack poseStack,
       Matrix4f projection,
       float partialTick,
       Camera camera,
@@ -48,24 +49,25 @@ public abstract class LevelRendererMixin {
 
   @Inject(
       method =
-          "renderSectionLayer(Lnet/minecraft/client/renderer/RenderType;DDDLorg/joml/Matrix4f;Lorg/joml/Matrix4f;)V",
+          "renderChunkLayer(Lnet/minecraft/client/renderer/RenderType;Lcom/mojang/blaze3d/vertex/PoseStack;DDDLorg/joml/Matrix4f;)V",
       at = @At("HEAD"))
   private void dx12mc$beginSectionLayer(
       RenderType renderType,
+      PoseStack poseStack,
       double cameraX,
       double cameraY,
       double cameraZ,
-      Matrix4f modelView,
       Matrix4f projection,
       CallbackInfo ci) {
     DX12MC
         .runtime()
-        .beginSectionLayer(renderType, cameraX, cameraY, cameraZ, modelView, projection);
+        .beginSectionLayer(
+            renderType, cameraX, cameraY, cameraZ, poseStack.last().pose(), projection);
   }
 
   @Redirect(
       method =
-          "renderSectionLayer(Lnet/minecraft/client/renderer/RenderType;DDDLorg/joml/Matrix4f;Lorg/joml/Matrix4f;)V",
+          "renderChunkLayer(Lnet/minecraft/client/renderer/RenderType;Lcom/mojang/blaze3d/vertex/PoseStack;DDDLorg/joml/Matrix4f;)V",
       at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/shaders/Uniform;set(FFF)V"))
   private void dx12mc$chunkOffset(Uniform uniform, float x, float y, float z) {
     DX12MC.runtime().sectionChunkOffset(x, y, z);
@@ -74,7 +76,7 @@ public abstract class LevelRendererMixin {
 
   @Redirect(
       method =
-          "renderSectionLayer(Lnet/minecraft/client/renderer/RenderType;DDDLorg/joml/Matrix4f;Lorg/joml/Matrix4f;)V",
+          "renderChunkLayer(Lnet/minecraft/client/renderer/RenderType;Lcom/mojang/blaze3d/vertex/PoseStack;DDDLorg/joml/Matrix4f;)V",
       at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/shaders/Uniform;upload()V"))
   private void dx12mc$skipLegacyChunkOffsetUpload(Uniform uniform) {
     if (!DX12MC.runtime().suppressLegacySectionDriverCalls()) uniform.upload();
@@ -82,7 +84,7 @@ public abstract class LevelRendererMixin {
 
   @Redirect(
       method =
-          "renderSectionLayer(Lnet/minecraft/client/renderer/RenderType;DDDLorg/joml/Matrix4f;Lorg/joml/Matrix4f;)V",
+          "renderChunkLayer(Lnet/minecraft/client/renderer/RenderType;Lcom/mojang/blaze3d/vertex/PoseStack;DDDLorg/joml/Matrix4f;)V",
       at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/vertex/VertexBuffer;bind()V"))
   private void dx12mc$skipLegacySectionBufferBind(VertexBuffer buffer) {
     if (!DX12MC.runtime().suppressLegacySectionDriverCalls()) buffer.bind();
@@ -90,7 +92,7 @@ public abstract class LevelRendererMixin {
 
   @Redirect(
       method =
-          "renderSectionLayer(Lnet/minecraft/client/renderer/RenderType;DDDLorg/joml/Matrix4f;Lorg/joml/Matrix4f;)V",
+          "renderChunkLayer(Lnet/minecraft/client/renderer/RenderType;Lcom/mojang/blaze3d/vertex/PoseStack;DDDLorg/joml/Matrix4f;)V",
       at = @At(value = "INVOKE", target = "Lcom/mojang/blaze3d/vertex/VertexBuffer;unbind()V"))
   private void dx12mc$skipLegacySectionBufferUnbind() {
     if (!DX12MC.runtime().suppressLegacySectionDriverCalls()) VertexBuffer.unbind();
@@ -98,14 +100,14 @@ public abstract class LevelRendererMixin {
 
   @Inject(
       method =
-          "renderSectionLayer(Lnet/minecraft/client/renderer/RenderType;DDDLorg/joml/Matrix4f;Lorg/joml/Matrix4f;)V",
+          "renderChunkLayer(Lnet/minecraft/client/renderer/RenderType;Lcom/mojang/blaze3d/vertex/PoseStack;DDDLorg/joml/Matrix4f;)V",
       at = @At("RETURN"))
   private void dx12mc$endSectionLayer(
       RenderType renderType,
+      PoseStack poseStack,
       double cameraX,
       double cameraY,
       double cameraZ,
-      Matrix4f modelView,
       Matrix4f projection,
       CallbackInfo ci) {
     DX12MC.runtime().endSectionLayer();

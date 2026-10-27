@@ -2,7 +2,6 @@ package net.dx12mc.mixin;
 
 import java.nio.file.Path;
 import net.dx12mc.DX12MC;
-import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import org.spongepowered.asm.mixin.Mixin;
@@ -17,16 +16,10 @@ public abstract class GameRendererMixin {
   @Shadow private Minecraft minecraft;
 
   @Inject(method = "render", at = @At("HEAD"), cancellable = true)
-  private void dx12mc$render(DeltaTracker deltaTracker, boolean renderLevel, CallbackInfo ci) {
+  private void dx12mc$render(
+      float partialTick, long nanoTime, boolean renderLevel, CallbackInfo ci) {
     DX12MC.runtime().onRenderHead(this.minecraft);
     if (DX12MC.runtime().shouldCancelGameRenderer()) {
-      ci.cancel();
-    }
-  }
-
-  @Inject(method = "processBlurEffect(F)V", at = @At("HEAD"), cancellable = true)
-  private void dx12mc$suppressLegacyBlur(float partialTick, CallbackInfo ci) {
-    if (DX12MC.runtime().suppressLegacyBlurPostProcess()) {
       ci.cancel();
     }
   }

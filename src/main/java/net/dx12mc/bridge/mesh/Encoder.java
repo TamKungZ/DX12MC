@@ -1,6 +1,7 @@
 package net.dx12mc.bridge.mesh;
 
-import com.mojang.blaze3d.vertex.MeshData;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormatElement;
 import java.nio.ByteBuffer;
@@ -11,25 +12,43 @@ public final class Encoder {
   private static final short[] EMPTY_SHORTS = new short[0];
   private static final byte[] EMPTY_BYTES = new byte[0];
 
+  private static final VertexFormatElement POSITION = DefaultVertexFormat.ELEMENT_POSITION;
+  private static final VertexFormatElement COLOR = DefaultVertexFormat.ELEMENT_COLOR;
+  private static final VertexFormatElement UV0 = DefaultVertexFormat.ELEMENT_UV0;
+  private static final VertexFormatElement UV1 = DefaultVertexFormat.ELEMENT_UV1;
+  private static final VertexFormatElement UV2 = DefaultVertexFormat.ELEMENT_UV2;
+  private static final VertexFormatElement NORMAL = DefaultVertexFormat.ELEMENT_NORMAL;
+
   private Encoder() {}
 
-  public static Batch encode(MeshData mesh) {
+  private static int offset(VertexFormat format, VertexFormatElement element) {
+    var elements = format.getElements();
+    int offset = 0;
+    for (int i = 0; i < elements.size(); i++) {
+      VertexFormatElement candidate = elements.get(i);
+      if (candidate.equals(element)) return offset;
+      offset += candidate.getByteSize();
+    }
+    return -1;
+  }
+
+  public static Batch encode(BufferBuilder.RenderedBuffer mesh) {
     return encode(mesh, null);
   }
 
-  public static Batch encodeReusable(MeshData mesh, Scratch scratch) {
+  public static Batch encodeReusable(BufferBuilder.RenderedBuffer mesh, Scratch scratch) {
     if (scratch == null) throw new IllegalArgumentException("scratch is null");
     return encode(mesh, scratch);
   }
 
-  private static Batch encode(MeshData mesh, Scratch scratch) {
+  private static Batch encode(BufferBuilder.RenderedBuffer mesh, Scratch scratch) {
     if (mesh == null) return null;
-    MeshData.DrawState state = mesh.drawState();
+    BufferBuilder.DrawState state = mesh.drawState();
     VertexFormat format = state.format();
     int vertexCount = state.vertexCount();
-    if (vertexCount <= 0 || !format.contains(VertexFormatElement.POSITION)) return null;
+    if (vertexCount <= 0 || state.indexOnly()) return null;
     int stride = format.getVertexSize();
-    int positionOffset = format.getOffset(VertexFormatElement.POSITION);
+    int positionOffset = offset(format, POSITION);
     if (stride <= 0 || positionOffset < 0 || positionOffset + Float.BYTES * 3 > stride) return null;
     ByteBuffer source = mesh.vertexBuffer().duplicate().order(ByteOrder.nativeOrder());
     long required = (long) stride * vertexCount;
@@ -39,16 +58,16 @@ public final class Encoder {
     float[] positions =
         scratch == null ? new float[positionCount] : scratch.positions(positionCount);
     int[] colors = scratch == null ? new int[vertexCount] : scratch.colors(vertexCount);
-    boolean hasColor = valid(format, VertexFormatElement.COLOR, 4, stride);
-    int colorOffset = hasColor ? format.getOffset(VertexFormatElement.COLOR) : -1;
-    boolean hasUv0 = valid(format, VertexFormatElement.UV0, Float.BYTES * 2, stride);
-    int uv0Offset = hasUv0 ? format.getOffset(VertexFormatElement.UV0) : -1;
-    boolean hasUv1 = valid(format, VertexFormatElement.UV1, Short.BYTES * 2, stride);
-    int uv1Offset = hasUv1 ? format.getOffset(VertexFormatElement.UV1) : -1;
-    boolean hasUv2 = valid(format, VertexFormatElement.UV2, Short.BYTES * 2, stride);
-    int uv2Offset = hasUv2 ? format.getOffset(VertexFormatElement.UV2) : -1;
-    boolean hasNormal = valid(format, VertexFormatElement.NORMAL, 3, stride);
-    int normalOffset = hasNormal ? format.getOffset(VertexFormatElement.NORMAL) : -1;
+    boolean hasColor = valid(format, COLOR, 4, stride);
+    int colorOffset = hasColor ? offset(format, COLOR) : -1;
+    boolean hasUv0 = valid(format, UV0, Float.BYTES * 2, stride);
+    int uv0Offset = hasUv0 ? offset(format, UV0) : -1;
+    boolean hasUv1 = valid(format, UV1, Short.BYTES * 2, stride);
+    int uv1Offset = hasUv1 ? offset(format, UV1) : -1;
+    boolean hasUv2 = valid(format, UV2, Short.BYTES * 2, stride);
+    int uv2Offset = hasUv2 ? offset(format, UV2) : -1;
+    boolean hasNormal = valid(format, NORMAL, 3, stride);
+    int normalOffset = hasNormal ? offset(format, NORMAL) : -1;
     float[] uv0 =
         hasUv0 ? (scratch == null ? new float[uvCount] : scratch.uv0(uvCount)) : EMPTY_FLOATS;
     short[] uv1 =
@@ -102,7 +121,7 @@ public final class Encoder {
         normals[target + 2] = source.get(n + 2);
       }
     }
-    ByteBuffer explicit = mesh.indexBuffer();
+    ByteBuffer explicit = state.sequentialIndex() ? null : mesh.indexBuffer();
     int indexCount =
         explicit != null
             ? state.indexCount()
@@ -224,8 +243,7 @@ public final class Encoder {
 
   private static boolean valid(
       VertexFormat format, VertexFormatElement element, int bytes, int stride) {
-    if (!format.contains(element)) return false;
-    int offset = format.getOffset(element);
+    int offset = offset(format, element);
     return offset >= 0 && offset + bytes <= stride;
   }
 

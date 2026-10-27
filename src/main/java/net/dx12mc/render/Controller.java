@@ -3,9 +3,9 @@ package net.dx12mc.render;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.platform.Window;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.ByteBufferBuilder;
-import com.mojang.blaze3d.vertex.MeshData;
+import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.VertexBuffer;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -50,7 +50,7 @@ public final class Controller implements AutoCloseable {
     lifecycle.initialize();
   }
 
-  public void capture(Slot slot, MeshData mesh, VertexBuffer.Usage usage) {
+  public void capture(Slot slot, BufferBuilder.RenderedBuffer mesh, VertexBuffer.Usage usage) {
     if (!config.nativeMode()) return;
     throwIfFailed();
     if (lifecycle.closed()) return;
@@ -63,12 +63,12 @@ public final class Controller implements AutoCloseable {
     }
   }
 
-  public void updateIndices(Slot slot, ByteBufferBuilder.Result result) {
+  public void updateIndices(Slot slot, ByteBuffer indices) {
     if (!config.nativeMode()) return;
     throwIfFailed();
-    if (lifecycle.closed() || result == null) return;
+    if (lifecycle.closed() || indices == null) return;
     try {
-      bridge.updateIndices(slot, result.byteBuffer());
+      bridge.updateIndices(slot, indices);
     } catch (Throwable throwable) {
       throw fatal("Unable to translate a Minecraft index-buffer update to D3D12.", throwable);
     }
@@ -403,6 +403,7 @@ public final class Controller implements AutoCloseable {
       if (!bridge.drawSection(
           slot,
           section.drawClipTransform(),
+          section.modelView(),
           section.framebufferWidth(),
           section.framebufferHeight(),
           section.originX(),
@@ -442,12 +443,12 @@ public final class Controller implements AutoCloseable {
     if (bridge != null) bridge.semanticIntent(this.semanticIntent);
   }
 
-  public boolean drawImmediate(MeshData mesh) {
+  public boolean drawImmediate(BufferBuilder.RenderedBuffer mesh) {
     if (!config.nativeMode()) return false;
     throwIfFailed();
     if (offscreenTargetBound && lifecycle.active()) return true;
     lifecycle.ensureInitialized(Minecraft.getInstance());
-    lifecycle.requireActive("immediate MeshData draw");
+    lifecycle.requireActive("immediate BufferBuilder.RenderedBuffer draw");
     try {
       lifecycle.ensureFrame(Minecraft.getInstance());
       Window window = Minecraft.getInstance().getWindow();
@@ -515,14 +516,6 @@ public final class Controller implements AutoCloseable {
 
   public boolean suppressLegacyOpenGlDriverWork() {
     return config.nativeMode() && lifecycle.active();
-  }
-
-  public boolean suppressLegacyBlurPostProcess() {
-    if (config.legacyPostProcessingAvailable()) return false;
-    throwIfFailed();
-    if (!lifecycle.active()) return false;
-    stats.suppressedLegacyBlur();
-    return true;
   }
 
   public void assertOpenGlDrawAllowed(String operation) {
