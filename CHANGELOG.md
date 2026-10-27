@@ -10,6 +10,10 @@ Note: 0.8.8 is the first version intended to initialize git history. Earlier ver
 - The End Poem screen draws its background with the same render type, so it uses the same fix.
 - Add `rendertype_end_gateway` to the vanilla shader table; before it fell back to the default entry.
 - F3, crash reports and the log now include the graphics driver version and the Direct3D feature level of the adapter bgfx opened. Both are read once at startup from DXGI and the Direct3D 12 device; NVIDIA's four-part driver number is shown in its usual form, other vendors show the raw version, and a value that cannot be read is left out.
+- Add a Minecraft 1.20.1 build, `0.11.1+mc1.20.1`, ported from the 1.21.1 code. It targets 1.20.1 only, and Gradle runs on JDK 21 while a Java 17 toolchain compiles the mod.
+- Take the shader table, uniform inputs and vertex formats from the vanilla 1.20.1 sources. Seven core programs that 1.20.1 has were added to the table (`position_color_normal`, `position_color_tex`, `position_tex_color_normal`, `position_tex_lightmap_color`, `rendertype_armor_glint`, `rendertype_glint_direct`, `rendertype_translucent_no_crumbling`) and the two it does not have (`rendertype_clouds`, `rendertype_breeze_wind`) were removed. Clouds use `position_tex_color_normal`.
+- Compute fog distance the way the 1.20.1 vertex shaders do: `fog_distance` applies the model-view matrix, and entity and text shaders first apply the inverse view rotation. The shaders get the matrix through a new `u_fogView` uniform.
+- Menu Background Blur does not exist in 1.20.1, and the End Poem background is a plain textured screen there, so the menu blur hook and the End Poem item above do not apply to this build.
 
 ## 0.11.0 - Smaller vertices and release publishing
 

@@ -36,7 +36,7 @@ DX12MC hooks Minecraft at a small number of render and resource choke points:
 - `VertexBuffer` for persistent mesh uploads and draws.
 - `NativeImage`, `TextureUtil`, and texture-related calls for image upload data.
 - `GlStateManager`, `RenderSystem`, and `RenderTarget` where Minecraft still expects GL-shaped lifecycle or state calls, including clears, texture parameters and the bound render target.
-- `Window.updateVsync`, `Options`, and `OptionInstance` so video settings either drive the D3D12 backend or are shown as unavailable.
+- `Window.updateVsync` and `Options` so video settings drive the D3D12 backend, and the Fabulous graphics mode is not offered.
 - `GlUtil` and `TimerQuery` so renderer information and GPU timing describe the D3D12 adapter instead of the bootstrap OpenGL context. The adapter's driver version and feature level are read once at startup and shared by F3, crash reports and the log.
 
 The project prefers semantic Minecraft hooks over raw OpenGL interception. Low-level GL hooks are kept narrow: they mirror state DX12MC needs or stop unsupported raw rendering from being hidden.
@@ -89,7 +89,7 @@ DX12MC does not try to make every Minecraft render path work by mixing native D3
 
 Examples of intentionally limited behavior:
 
-- legacy menu blur is omitted until native render-target or post-processing support exists, and the Fabulous graphics mode is not offered for the same reason;
+- the Fabulous graphics mode is not offered, because it needs OpenGL render targets and post-processing that DX12MC does not support yet;
 - OpenGL post chains (spectator effects, glowing-entity outlines) are skipped, and draws issued while an offscreen render target is bound are not drawn to the screen;
 - screenshots of offscreen render targets (panorama capture) are not supported.
 
