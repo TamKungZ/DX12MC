@@ -21,9 +21,11 @@ import net.dx12mc.graphics.bgfx.Backend;
 import net.dx12mc.graphics.bgfx.BenchViews;
 import net.dx12mc.graphics.bgfx.Mesh;
 import net.dx12mc.graphics.bgfx.ScreenCapture;
+import net.dx12mc.graphics.bgfx.Target;
 import net.dx12mc.graphics.bgfx.Texture;
 import net.dx12mc.graphics.bgfx.ViewSequence;
 import net.dx12mc.graphics.pipeline.PipelineSet;
+import net.dx12mc.graphics.pipeline.PostPipeline;
 import org.joml.FrustumIntersection;
 import org.joml.Matrix4f;
 import org.lwjgl.bgfx.BGFXStats;
@@ -49,6 +51,11 @@ final class FrameBench {
   private final PipelineSet pipelines;
   private final boolean profile;
   private final boolean f3;
+  private final String effect;
+  private final PostPipeline post = new PostPipeline();
+  private final float[] postValues = new float[PostPipeline.UNIFORM_FLOATS];
+  private Target mainTarget;
+  private Target swapTarget;
   private final Texture atlas = Texture.create(ATLAS, ATLAS, 4);
   private final Texture lightmap = Texture.create(16, 16, 0);
   private final Texture entityTexture = Texture.create(64, 64, 0);
@@ -78,8 +85,10 @@ final class FrameBench {
           ? new int[] {3, 1, 5, 6, 2, 4, 0}
           : new int[] {0, 2, 4, 6, 5, 3, 1};
 
-  private FrameBench(Backend backend, PipelineSet pipelines, boolean profile, boolean f3) {
+  private FrameBench(
+      Backend backend, PipelineSet pipelines, boolean profile, boolean f3, String effect) {
     this.backend = backend;
+    this.effect = effect;
     this.pipelines = pipelines;
     this.profile = profile;
     this.f3 = f3;
@@ -91,17 +100,53 @@ final class FrameBench {
     int repeats = 3;
     for (String arg : args)
       if (arg.startsWith("repeat=")) repeats = Integer.parseInt(arg.substring(7));
-    FrameBench bench = new FrameBench(backend, pipelines, profile, has(args, "f3"));
+    String effect = null;
+    String compare = null;
+    for (String arg : args) {
+      if (arg.startsWith("effect=")) effect = arg.substring(7);
+      if (arg.startsWith("compare=")) compare = arg.substring(8);
+    }
+    FrameBench bench = new FrameBench(backend, pipelines, profile, has(args, "f3"), effect);
     try {
       bench.build();
+      bench.startPost();
       for (String arg : args) {
         if (arg.startsWith("capture=")) {
-          bench.capture(new File("build/frame-bench/" + arg.substring(8) + ".png"));
+          File file = new File("build/frame-bench/" + arg.substring(8) + ".png");
+          bench.capture(file);
+          if (compare != null)
+            compareImages(file, new File("build/frame-bench/" + compare + ".png"));
         }
       }
       for (int run = 0; run < repeats; run++) bench.measure(run);
     } finally {
       bench.close();
+    }
+  }
+
+  private static void compareImages(File actual, File expected) {
+    try {
+      BufferedImage a = ImageIO.read(actual);
+      BufferedImage b = ImageIO.read(expected);
+      if (a.getWidth() != b.getWidth() || a.getHeight() != b.getHeight()) {
+        System.out.println("frame compare FAIL: sizes differ");
+        return;
+      }
+      long different = 0;
+      for (int y = 0; y < a.getHeight(); y++) {
+        for (int x = 0; x < a.getWidth(); x++) if (a.getRGB(x, y) != b.getRGB(x, y)) different++;
+      }
+      System.out.println(
+          "frame compare "
+              + actual.getName()
+              + " vs "
+              + expected.getName()
+              + ": "
+              + different
+              + " differing pixels of "
+              + (long) a.getWidth() * a.getHeight());
+    } catch (IOException exception) {
+      throw new IllegalStateException(exception);
     }
   }
 
@@ -178,7 +223,7 @@ final class FrameBench {
   private void frame() {
     FrameSize size = new FrameSize(WIDTH, HEIGHT);
     passNames.clear();
-    backend.beginFrame(size);
+    backend.beginFrame(size, effect == null ? null : mainTarget);
     float[] fog = {0.02f, 0.03f, 0.06f, 1.0f};
     backend.clear(
         ViewSequence.GL_COLOR_BUFFER_BIT | ViewSequence.GL_DEPTH_BUFFER_BIT,
@@ -211,7 +256,58 @@ final class FrameBench {
     backend.clear(ViewSequence.GL_DEPTH_BUFFER_BIT, 0, 1.0f);
     pass("gui");
     gui();
+    if (effect != null) postProcess();
     backend.endFrame();
+  }
+
+  private void postProcess() {
+    if (effect.equals("blur")) {
+      float[] radii = {15.0f, 15.0f, 7.0f, 7.0f};
+      for (int i = 0; i < radii.length; i++) {
+        boolean horizontal = i % 2 == 0;
+        Target in = horizontal ? mainTarget : swapTarget;
+        Target out = horizontal ? swapTarget : mainTarget;
+        sizes(in, out);
+        postValues[4] = horizontal ? 1.0f : 0.0f;
+        postValues[5] = horizontal ? 0.0f : 1.0f;
+        postValues[6] = radii[i];
+        postPass(PostPipeline.Effect.BLUR, in, out, horizontal ? null : mainTarget);
+      }
+    }
+    backend.beginPresentView();
+    sizes(mainTarget, mainTarget);
+    postValues[4] = postValues[5] = postValues[6] = postValues[7] = 1.0f;
+    if (!post.draw(
+        PostPipeline.Effect.BLIT,
+        mainTarget.colorTexture(),
+        BGFX_INVALID_HANDLE,
+        false,
+        postValues,
+        post.blendState(false, false))) {
+      throw new IllegalStateException("present blit rejected");
+    }
+  }
+
+  private void sizes(Target in, Target out) {
+    Arrays.fill(postValues, 0.0f);
+    postValues[0] = in.width();
+    postValues[1] = in.height();
+    postValues[2] = out.width();
+    postValues[3] = out.height();
+  }
+
+  private void postPass(PostPipeline.Effect effect, Target in, Target out, Target main) {
+    backend.bindTarget(main != null ? null : out);
+    backend.clear(ViewSequence.GL_COLOR_BUFFER_BIT | ViewSequence.GL_DEPTH_BUFFER_BIT, 0, 1.0f);
+    if (!post.draw(
+        effect,
+        in.colorTexture(),
+        BGFX_INVALID_HANDLE,
+        true,
+        postValues,
+        post.blendState(false, true))) {
+      throw new IllegalStateException("post pass rejected");
+    }
   }
 
   private float frameYaw() {
@@ -219,7 +315,7 @@ final class FrameBench {
   }
 
   private void pass(String name) {
-    if (profile) BenchViews.split(WIDTH, HEIGHT);
+    if (profile && effect == null) BenchViews.split(WIDTH, HEIGHT);
     int view = BenchViews.current();
     while (passNames.size() <= view) passNames.add(name);
     passNames.set(view, name);
@@ -961,7 +1057,17 @@ final class FrameBench {
     }
   }
 
+  private void startPost() {
+    if (effect == null) return;
+    post.start();
+    mainTarget = Target.create(WIDTH, HEIGHT, true);
+    swapTarget = Target.create(WIDTH, HEIGHT, true);
+  }
+
   private void close() {
+    if (mainTarget != null) mainTarget.close();
+    if (swapTarget != null) swapTarget.close();
+    post.close();
     for (List<Page> pages : List.of(solid, cutout, translucent)) {
       for (Page page : pages) page.mesh().close();
     }
