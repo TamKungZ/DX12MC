@@ -85,7 +85,8 @@ class StabilitySourceTest {
     assertTrue(target.contains("bindWrite(Z)V"));
     assertTrue(target.contains("unbindWrite()V"));
     assertTrue(target.contains("clear(Z)V"));
-    assertTrue(target.contains("suppressVanillaFramebufferBlit()"));
+    assertTrue(target.contains("blitRenderTarget("));
+    assertTrue(controller.contains("return suppressVanillaFramebufferBlit();"));
     assertTrue(target.contains("suppressLegacyOpenGlDriverWork()"));
     assertTrue(target.contains("ci.cancel()"));
     assertTrue(controller.contains("state != State.ACTIVE"));
