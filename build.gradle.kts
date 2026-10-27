@@ -74,6 +74,8 @@ val shaderSpecs = listOf(
     ShaderSpec("fs_position_color_tex_cutout", "fragment", 'F'),
     ShaderSpec("vs_entity", "vertex", 'V'),
     ShaderSpec("vs_line", "vertex", 'V'),
+    ShaderSpec("vs_end_portal", "vertex", 'V'),
+    ShaderSpec("fs_end_portal", "fragment", 'F'),
     ShaderSpec("fs_entity", "fragment", 'F'),
     ShaderSpec("fs_entity_cutout", "fragment", 'F')
 )
@@ -238,6 +240,8 @@ val validateD3D12ShaderSources by tasks.registering {
             "fs_position_color_tex_cutout.sc" to "#include \"texture.sh\"",
             "vs_entity.sc" to "#include \"texture.sh\"",
             "vs_line.sc" to "#include \"common.sh\"",
+            "vs_end_portal.sc" to "#include \"common.sh\"",
+            "fs_end_portal.sc" to "#include \"texture.sh\"",
             "fs_entity.sc" to "#include \"texture.sh\"",
             "fs_entity_cutout.sc" to "#include \"texture.sh\""
         )
@@ -266,6 +270,12 @@ val validateD3D12ShaderSources by tasks.registering {
             "vec2(-screenDirection.y, screenDirection.x) * u_lineParams.x / u_lineParams.yz",
             "if (lineOffset.x < 0.0) lineOffset *= -1.0;",
             "lineOffset * a_texcoord0.x"))
+        requireAll("vs_end_portal.sc", listOf(
+            "uniform mat4 u_mvp;", "v_texProj = vec4(clip.xy * 0.5 + vec2_splat(clip.w * 0.5), clip.zw);"))
+        requireAll("fs_end_portal.sc", listOf(
+            "SAMPLER2D(s_texColor, 0)", "SAMPLER2D(s_overlay, 1)", "uniform vec4 u_portal;",
+            "for (int i = 0; i < layers; i++)", "(4.5 - layer / 4.0) * 2.0", "17.0 / layer * p.w",
+            "(2.0 + layer / 1.5) * (u_portal.x * 1.5) * p.w", "xy * 0.5 + vec2_splat(0.25 * p.w)"))
         requireAll("vs_entity.sc", listOf(
             "SAMPLER2D(s_overlay, 1)", "dx12mcMixLight(u_lightDir0.xyz, u_lightDir1.xyz, normal, a_color0)"))
         val fragments = listOf(
