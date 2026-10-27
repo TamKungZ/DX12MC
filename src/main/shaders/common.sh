@@ -5,11 +5,16 @@ vec2 vec2_splat(float _x) { return vec2(_x, _x); }
 vec3 vec3_splat(float _x) { return vec3(_x, _x, _x); }
 vec4 vec4_splat(float _x) { return vec4(_x, _x, _x, _x); }
 
-float dx12mcFogDistance(vec3 _pos, float _shape)
+float dx12mcFogDistance(vec3 _pos, mat4 _view, float _shape)
 {
-    if (_shape < 0.5) return length(_pos);
-    if (_shape < 1.5) return max(length(_pos.xz), abs(_pos.y));
-    return -_pos.z;
+    if (_shape < 0.5) return length(mul(_view, vec4(_pos, 1.0)).xyz);
+    if (_shape < 1.5)
+    {
+        float distXZ = length(mul(_view, vec4(_pos.x, 0.0, _pos.z, 1.0)).xyz);
+        float distY = length(mul(_view, vec4(0.0, _pos.y, 0.0, 1.0)).xyz);
+        return max(distXZ, distY);
+    }
+    return -mul(_view, vec4(_pos, 1.0)).z;
 }
 
 vec4 dx12mcApplyFog(vec4 _color, float _distance, vec4 _params, vec4 _fogColor)

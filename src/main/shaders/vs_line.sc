@@ -4,6 +4,7 @@ $output v_color0, v_fog
 
 uniform mat4 u_mvp;
 uniform mat4 u_fogModel;
+uniform mat4 u_fogView;
 uniform vec4 u_fogParams;
 uniform vec4 u_lineParams;
 void main()
@@ -17,6 +18,6 @@ void main()
     vec2 lineOffset = vec2(-screenDirection.y, screenDirection.x) * u_lineParams.x / u_lineParams.yz;
     if (lineOffset.x < 0.0) lineOffset *= -1.0;
     gl_Position = vec4((ndc1 + vec3(lineOffset * a_texcoord0.x, 0.0)) * clip.w, clip.w);
-    v_fog = dx12mcFogDistance(mul(u_fogModel, clip).xyz, u_fogParams.z);
+    v_fog = dx12mcFogDistance(mul(u_fogModel, clip).xyz, u_fogView, u_fogParams.z);
     v_color0 = a_color0;
 }

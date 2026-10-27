@@ -1,7 +1,7 @@
 package net.dx12mc.bridge;
 
 import com.mojang.blaze3d.platform.NativeImage;
-import com.mojang.blaze3d.vertex.MeshData;
+import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.VertexBuffer;
 import java.nio.ByteBuffer;
 import net.dx12mc.bridge.mesh.Batch;
@@ -45,7 +45,7 @@ public final class Bridge implements AutoCloseable {
     textures.start();
   }
 
-  public void capture(Slot slot, MeshData mesh, VertexBuffer.Usage usage) {
+  public void capture(Slot slot, BufferBuilder.RenderedBuffer mesh, VertexBuffer.Usage usage) {
     regions.invalidate(slot);
     meshes.capture(slot, mesh, usage, DrawContextFactory.shaderName());
   }
@@ -273,6 +273,7 @@ public final class Bridge implements AutoCloseable {
   public boolean drawSection(
       Slot slot,
       Matrix4f clipTransform,
+      Matrix4f modelView,
       int framebufferWidth,
       int framebufferHeight,
       int originX,
@@ -290,7 +291,14 @@ public final class Bridge implements AutoCloseable {
     try {
       context =
           contexts.createSection(
-              batch, clipTransform, framebufferWidth, framebufferHeight, offsetX, offsetY, offsetZ);
+              batch,
+              clipTransform,
+              modelView,
+              framebufferWidth,
+              framebufferHeight,
+              offsetX,
+              offsetY,
+              offsetZ);
     } catch (StagingBackpressureException pressure) {
       stats.deferredSectionDraw();
       return true;
@@ -356,20 +364,24 @@ public final class Bridge implements AutoCloseable {
   }
 
   public boolean drawImmediate(
-      MeshData mesh,
+      BufferBuilder.RenderedBuffer mesh,
       Matrix4f modelView,
       Matrix4f projection,
       int framebufferWidth,
       int framebufferHeight) {
     requireStarted();
-    if (mesh == null) throw unsupported("BufferUploader supplied null MeshData");
-    MeshData.DrawState drawState = mesh.drawState();
+    if (mesh == null)
+      throw unsupported("BufferUploader supplied null BufferBuilder.RenderedBuffer");
+    BufferBuilder.DrawState drawState = mesh.drawState();
     String activeShader = DrawContextFactory.shaderName();
     Batch batch = Encoder.encodeReusable(mesh, immediateScratch);
     stats.immediateCaptured(batch);
     if (batch == null) {
       throw unsupported(
-          "Unsupported immediate MeshData: " + describe(drawState) + ", shader=" + activeShader);
+          "Unsupported immediate BufferBuilder.RenderedBuffer: "
+              + describe(drawState)
+              + ", shader="
+              + activeShader);
     }
     DrawContext context;
     try {
@@ -529,7 +541,7 @@ public final class Bridge implements AutoCloseable {
     }
   }
 
-  private static String describe(MeshData.DrawState state) {
+  private static String describe(BufferBuilder.DrawState state) {
     if (state == null) return "drawState=null";
     return "mode="
         + state.mode()

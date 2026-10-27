@@ -7,6 +7,7 @@ SAMPLER2D(s_lightmap, 2);
 uniform mat4 u_mvp;
 uniform mat4 u_texMatrix;
 uniform mat4 u_fogModel;
+uniform mat4 u_fogView;
 uniform vec4 u_fogParams;
 uniform vec4 u_lightParams;
 uniform vec4 u_lightDir0;
@@ -17,7 +18,7 @@ void main()
     gl_Position = clip;
     vec4 uv = mul(u_texMatrix, vec4(a_texcoord0, 0.0, 1.0));
     v_texcoord0 = uv.xy;
-    v_fog = dx12mcFogDistance(mul(u_fogModel, clip).xyz, u_fogParams.z);
+    v_fog = dx12mcFogDistance(mul(u_fogModel, clip).xyz, u_fogView, u_fogParams.z);
     vec3 normal = (a_normal.xyz * 255.0 - vec3_splat(128.0)) / 127.0;
     v_color0 = a_color0;
     if (u_lightParams.z > 0.5) v_color0 = dx12mcMixLight(u_lightDir0.xyz, u_lightDir1.xyz, normal, a_color0);

@@ -13,6 +13,7 @@ import net.dx12mc.bridge.state.RenderState;
 import net.dx12mc.bridge.texture.Registry;
 import net.dx12mc.graphics.bgfx.Texture;
 import net.dx12mc.mixin.RenderSystemAccessor;
+import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
@@ -23,6 +24,8 @@ final class DrawContextFactory {
   private final Matrix4f mvpScratch = new Matrix4f();
   private final Matrix4f clipScratch = new Matrix4f();
   private final Matrix4f fogScratch = new Matrix4f();
+  private final Matrix4f fogRotationScratch = new Matrix4f();
+  private final Matrix4f fogViewScratch = new Matrix4f();
   private final DrawContext context = new DrawContext();
   private String classifiedShaderName;
   private ShaderSemantics semantics = ShaderSemantics.of(null);
@@ -48,7 +51,11 @@ final class DrawContextFactory {
     mvpScratch.mul(modelView);
     clipScratch.identity().m22(0.5f).m32(0.5f).mul(mvpScratch).get(context.matrix);
     prepareSharedUniforms();
-    fogSpaceFromClip(clipScratch, ShaderInputs.viewSpaceFog(semantics) ? modelView : null);
+    fogSpaceFromClip(
+        clipScratch,
+        fogModelTransform(
+            semantics, modelView, RenderSystem.getInverseViewRotationMatrix(), fogRotationScratch));
+    (fogAppliesModelView(semantics) ? modelView : fogViewScratch.identity()).get(context.fogView);
     RenderState.Snapshot state = snapshot(framebufferWidth, framebufferHeight);
     DrawContext prepared = prepareResources(batch, shader, immediate, state);
     context.primitive = primitive(batch.sourceMode());
@@ -66,6 +73,7 @@ final class DrawContextFactory {
   DrawContext createSection(
       Batch batch,
       Matrix4f clipTransform,
+      Matrix4f modelView,
       int framebufferWidth,
       int framebufferHeight,
       float offsetX,
@@ -81,6 +89,7 @@ final class DrawContextFactory {
     prepareSharedUniforms();
     context.primitive = 0L;
     fogSpaceFromClip(clipTransform, null);
+    (fogAppliesModelView(semantics) ? modelView : fogViewScratch.identity()).get(context.fogView);
     fogScratch.mulLocal(clipScratch.translation(offsetX, offsetY, offsetZ)).get(context.fogModel);
     RenderState.Snapshot state = snapshot(framebufferWidth, framebufferHeight);
     prepareResources(batch, shader, false, state);
@@ -93,6 +102,23 @@ final class DrawContextFactory {
   void sectionMatrix(Matrix4f clipTransform) {
     clipTransform.get(context.matrix);
     applyDepthBias(sectionDepthBias);
+  }
+
+  static Matrix4f fogModelTransform(
+      ShaderSemantics semantics,
+      Matrix4f modelView,
+      Matrix3f inverseViewRotation,
+      Matrix4f scratch) {
+    return switch (semantics.fogSpace()) {
+      case POSITION, MODEL_VIEW -> null;
+      case MODEL_VIEW_INVERSE_ROTATION -> scratch.set(inverseViewRotation);
+      case VIEW, VIEW_SPHERE, VIEW_DEPTH -> modelView;
+    };
+  }
+
+  static boolean fogAppliesModelView(ShaderSemantics semantics) {
+    return semantics.fogSpace() == ShaderSemantics.FogSpace.MODEL_VIEW
+        || semantics.fogSpace() == ShaderSemantics.FogSpace.MODEL_VIEW_INVERSE_ROTATION;
   }
 
   private void fogSpaceFromClip(Matrix4f clip, Matrix4f viewSpace) {

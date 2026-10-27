@@ -34,6 +34,7 @@ public final class DrawContext {
   final float[] textureMatrix = new float[16];
   final float[] tint = new float[4];
   final float[] fogModel = new float[16];
+  final float[] fogView = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
   final float[] fogParams = new float[4];
   final float[] fogColor = new float[4];
   final float[] material = new float[4];
@@ -113,6 +114,10 @@ public final class DrawContext {
 
   public float[] fogModel() {
     return fogModel;
+  }
+
+  public float[] fogView() {
+    return fogView;
   }
 
   public float[] fogParams() {

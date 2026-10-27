@@ -5,6 +5,7 @@ $output v_color0, v_texcoord0, v_fog
 uniform mat4 u_mvp;
 uniform mat4 u_texMatrix;
 uniform mat4 u_fogModel;
+uniform mat4 u_fogView;
 uniform vec4 u_fogParams;
 void main()
 {
@@ -12,6 +13,6 @@ void main()
     gl_Position = clip;
     vec4 uv = mul(u_texMatrix, vec4(a_texcoord0, 0.0, 1.0));
     v_texcoord0 = uv.xy;
-    v_fog = dx12mcFogDistance(mul(u_fogModel, clip).xyz, u_fogParams.z);
+    v_fog = dx12mcFogDistance(mul(u_fogModel, clip).xyz, u_fogView, u_fogParams.z);
     v_color0 = a_color0;
 }

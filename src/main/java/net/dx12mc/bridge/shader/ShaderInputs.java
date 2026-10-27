@@ -53,8 +53,4 @@ public final class ShaderInputs {
     target[2] = diffuse && semantics.diffuseLighting() ? 1.0f : 0.0f;
     target[3] = 0.0f;
   }
-
-  public static boolean viewSpaceFog(ShaderSemantics semantics) {
-    return semantics.fogSpace() != ShaderSemantics.FogSpace.POSITION;
-  }
 }

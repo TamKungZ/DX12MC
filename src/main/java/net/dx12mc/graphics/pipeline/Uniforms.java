@@ -5,7 +5,7 @@ import static org.lwjgl.bgfx.BGFX.*;
 import net.dx12mc.bridge.DrawContext;
 
 final class Uniforms implements AutoCloseable {
-  private final short[] handles = new short[16];
+  private final short[] handles = new short[17];
   final short mvp = create(0, "u_mvp", BGFX_UNIFORM_TYPE_MAT4);
   final short color = create(1, "u_color", BGFX_UNIFORM_TYPE_VEC4);
   final short textureMatrix = create(2, "u_texMatrix", BGFX_UNIFORM_TYPE_MAT4);
@@ -22,6 +22,7 @@ final class Uniforms implements AutoCloseable {
   final short lightmap = create(13, "s_lightmap", BGFX_UNIFORM_TYPE_SAMPLER);
   final short lineParams = create(14, "u_lineParams", BGFX_UNIFORM_TYPE_VEC4);
   final short portal = create(15, "u_portal", BGFX_UNIFORM_TYPE_VEC4);
+  final short fogView = create(16, "u_fogView", BGFX_UNIFORM_TYPE_MAT4);
 
   Uniforms() {
     for (int i = 0; i < handles.length; i++) {
@@ -39,6 +40,7 @@ final class Uniforms implements AutoCloseable {
   void shared(DrawContext context) {
     bgfx_set_uniform(color, context.tint(), 1);
     bgfx_set_uniform(fogModel, context.fogModel(), 1);
+    bgfx_set_uniform(fogView, context.fogView(), 1);
     bgfx_set_uniform(fogParams, context.fogParams(), 1);
     bgfx_set_uniform(fogColor, context.fogColor(), 1);
     if (context.alphaTest() || context.textured()) {
