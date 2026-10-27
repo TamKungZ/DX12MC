@@ -1,5 +1,6 @@
 package net.dx12mc.client;
 
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.VertexBuffer;
@@ -10,6 +11,7 @@ import net.dx12mc.config.Config;
 import net.dx12mc.graphics.RendererInfo;
 import net.dx12mc.render.Controller;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.PostChain;
 import net.minecraft.client.renderer.RenderType;
 import org.joml.Matrix4f;
 
@@ -103,12 +105,20 @@ public final class Runtime implements AutoCloseable {
     return controller.clear(mask);
   }
 
-  public void bindRenderTarget(boolean mainTarget) {
-    controller.bindRenderTarget(mainTarget);
+  public void bindRenderTarget(RenderTarget target) {
+    controller.bindRenderTarget(target);
   }
 
-  public boolean suppressPostChain() {
-    return controller.suppressPostChain();
+  public void releaseRenderTarget(RenderTarget target) {
+    controller.releaseRenderTarget(target);
+  }
+
+  public boolean processPostChain(PostChain chain, float partialTick) {
+    return controller.processPostChain(chain, partialTick);
+  }
+
+  public boolean blitRenderTarget(RenderTarget target, boolean disableBlend) {
+    return controller.blitRenderTarget(target, disableBlend);
   }
 
   public void bindTexture(int id) {
