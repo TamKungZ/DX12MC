@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class PostChainMixin {
 
   @Inject(method = "process(F)V", at = @At("HEAD"), cancellable = true)
-  private void dx12mc$suppressOpenGlPostChain(float partialTick, CallbackInfo ci) {
-    if (DX12MC.runtime().suppressPostChain()) ci.cancel();
+  private void dx12mc$processNatively(float partialTick, CallbackInfo ci) {
+    if (DX12MC.runtime().processPostChain((PostChain) (Object) this, partialTick)) ci.cancel();
   }
 }
