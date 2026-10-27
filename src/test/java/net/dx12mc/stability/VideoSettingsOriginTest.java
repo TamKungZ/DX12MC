@@ -214,22 +214,23 @@ class VideoSettingsOriginTest {
   }
 
   @Test
-  void menuBlurButtonAndItsOnlyConsumerShareOnePredicate() throws IOException {
+  void menuBlurSliderStaysEnabledAndItsOnlyConsumerRunsThroughThePostChainHook()
+      throws IOException {
     assertEquals(
         Set.of("net/minecraft/client/renderer/GameRenderer.processBlurEffect(F)V"),
         callersOf(OPTIONS + ".getMenuBackgroundBlurriness()I"));
-    String gameRenderer = read("mixin/GameRendererMixin.java");
-    assertTrue(gameRenderer.contains("processBlurEffect(F)V"));
-    assertTrue(gameRenderer.contains("suppressLegacyBlurPostProcess()"));
-    String controller = read("render/Controller.java");
-    int start = controller.indexOf("public boolean suppressLegacyBlurPostProcess()");
     assertTrue(
-        controller
-            .substring(start, controller.indexOf('}', start))
-            .contains("config.legacyPostProcessingAvailable()"));
-    String button = read("mixin/OptionInstanceMixin.java");
-    assertTrue(button.contains("DX12MC.runtime().legacyPostProcessingAvailable()"));
-    assertTrue(button.contains("button.active = false"));
+        withoutDescriptors(callersOf("net/minecraft/client/renderer/PostChain.process(F)V"))
+            .contains("net/minecraft/client/renderer/GameRenderer.processBlurEffect"));
+    assertFalse(read("mixin/GameRendererMixin.java").contains("processBlurEffect"));
+    assertTrue(read("mixin/PostChainMixin.java").contains("processPostChain("));
+    assertFalse(
+        Files.exists(
+            Path.of("src", "main", "java", "net", "dx12mc", "mixin", "OptionInstanceMixin.java")));
+    assertFalse(
+        Files.readString(Path.of("src", "main", "resources", "dx12mc.mixins.json"))
+            .contains("OptionInstanceMixin"));
+    assertFalse(read("client/VideoOptions.java").contains("button.active"));
   }
 
   @Test
