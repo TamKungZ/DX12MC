@@ -220,7 +220,9 @@ val validateD3D12ShaderSources by tasks.registering {
             "(floor(_uv2 / 16.0) + vec2_splat(0.5)) / 16.0",
             "smoothstep(_params.x, _params.y, _distance)",
             "smoothstep(_params.y, _params.x, _distance)",
-            "max(length(_pos.xz), abs(_pos.y))"
+            "float distXZ = length(mul(_view, vec4(_pos.x, 0.0, _pos.z, 1.0)).xyz);",
+            "float distY = length(mul(_view, vec4(0.0, _pos.y, 0.0, 1.0)).xyz);",
+            "return max(distXZ, distY);"
         )
         for (needle in vanillaConstants) {
             if (!common.contains(needle)) {
@@ -259,7 +261,8 @@ val validateD3D12ShaderSources by tasks.registering {
         }
         for (name in listOf("vs_position_color.sc", "vs_position_color_light.sc", "vs_position_color_tex.sc",
                 "vs_position_color_tex_light.sc", "vs_entity.sc", "vs_line.sc")) {
-            requireAll(name, listOf("uniform mat4 u_fogModel;", "dx12mcFogDistance(mul(u_fogModel, clip).xyz"))
+            requireAll(name, listOf("uniform mat4 u_fogModel;", "uniform mat4 u_fogView;",
+                "dx12mcFogDistance(mul(u_fogModel, clip).xyz, u_fogView, u_fogParams.z)"))
         }
         for (name in listOf("vs_position_color_light.sc", "vs_position_color_tex_light.sc", "vs_entity.sc")) {
             requireAll(name, listOf("SAMPLER2D(s_lightmap, 2)",
@@ -310,6 +313,8 @@ val compileD3D12Shaders by tasks.registering {
     group = "dx12mc verification"
     description = "Compiles every DX12MC D3D12 shader and reports all shader failures together."
     dependsOn(prepareShaderc, validateD3D12ShaderSources)
+    inputs.property("shadercSha256", findProperty("shaderc_sha256_$lwjglVersion") as String?)
+    inputs.property("shadercProfile", shadercProfile)
     for (spec in shaderSpecs) {
         inputs.file(shaderSourceDir.file("${spec.name}.sc"))
     }
@@ -334,7 +339,7 @@ val compileD3D12Shaders by tasks.registering {
                 "-o", outputFile.absolutePath,
                 "--type", spec.type,
                 "--platform", "windows",
-                "-p", shadercProfile,
+                "-p", (if (spec.type == "vertex") "vs_" else "ps_") + shadercProfile,
                 "--varyingdef", varyingFile.absolutePath,
                 "-i", shaderSourceDir.asFile.absolutePath,
                 "-O", shadercOptimization
@@ -386,6 +391,12 @@ val verifyD3D12Shaders by tasks.registering {
                 )
             }
         }
+    }
+}
+
+configurations.configureEach {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "org.lwjgl") useVersion(lwjglVersion)
     }
 }
 
@@ -442,9 +453,8 @@ val installD3D12Shaders by tasks.registering(Sync::class) {
     into(installedShaderRoot)
 }
 
-tasks.jar {
-    dependsOn(installD3D12Shaders)
-    from(installedShaderRoot)
+sourceSets.main {
+    output.dir(mapOf("builtBy" to installD3D12Shaders), installedShaderRoot)
 }
 
 tasks.withType<JavaCompile>().configureEach {

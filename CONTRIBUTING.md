@@ -5,7 +5,7 @@ Pull requests are welcome for focused fixes and improvements. Open an issue firs
 ## Requirements
 
 - Windows 10 or 11. The Direct3D 12 backend and the shader build are Windows-only.
-- JDK 21. The build uses a Java 21 toolchain.
+- JDK 21 to run Gradle and JDK 17 for the Java 17 toolchain that compiles the mod.
 - A Direct3D 12 capable GPU to run the game or the benchmarks.
 
 ## Build and check
