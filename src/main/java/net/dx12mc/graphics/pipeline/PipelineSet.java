@@ -55,6 +55,8 @@ public final class PipelineSet implements AutoCloseable {
           "vs_line",
           "fs_position_color",
           "fs_position_color_alpha");
+      create(
+          DrawContext.Kind.END_PORTAL, layout, "vs_end_portal", "fs_end_portal", "fs_end_portal");
     } catch (Throwable throwable) {
       close();
       throw throwable;
