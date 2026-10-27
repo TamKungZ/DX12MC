@@ -85,7 +85,8 @@ class StabilitySourceTest {
     assertTrue(target.contains("bindWrite(Z)V"));
     assertTrue(target.contains("unbindWrite()V"));
     assertTrue(target.contains("clear(Z)V"));
-    assertTrue(target.contains("suppressVanillaFramebufferBlit()"));
+    assertTrue(target.contains("blitRenderTarget("));
+    assertTrue(controller.contains("return suppressVanillaFramebufferBlit();"));
     assertTrue(target.contains("suppressLegacyOpenGlDriverWork()"));
     assertTrue(target.contains("ci.cancel()"));
     assertTrue(controller.contains("state != State.ACTIVE"));
@@ -220,17 +221,16 @@ class StabilitySourceTest {
   }
 
   @Test
-  void legacyOpenGlMenuBlurCannotOverwriteTheD3D12Backbuffer() throws IOException {
+  void menuBlurRunsOnTheNativePostChainInsteadOfTheLegacyOpenGlPath() throws IOException {
     String gameRenderer = read("mixin/GameRendererMixin.java");
     String controller = read("render/Controller.java");
     String runtime = read("client/Runtime.java");
-    assertTrue(gameRenderer.contains("processBlurEffect(F)V"));
-    assertFalse(gameRenderer.contains("method = \"renderBlur(F)V\""));
-    assertTrue(gameRenderer.contains("suppressLegacyBlurPostProcess()"));
-    assertTrue(gameRenderer.contains("ci.cancel()"));
-    assertTrue(controller.contains("public boolean suppressLegacyBlurPostProcess()"));
-    assertTrue(controller.contains("stats.suppressedLegacyBlur()"));
-    assertTrue(runtime.contains("suppressLegacyBlurPostProcess"));
+    assertFalse(gameRenderer.contains("processBlurEffect"));
+    assertFalse(controller.contains("suppressLegacyBlurPostProcess"));
+    assertFalse(runtime.contains("suppressLegacyBlurPostProcess"));
+    assertTrue(runtime.contains("processPostChain"));
+    assertTrue(controller.contains("minecraft.options.getMenuBackgroundBlurriness() >= 1"));
+    assertTrue(controller.contains("access.dx12mc$blurEffect() != null"));
     assertFalse(controller.contains("OpenGL blur fallback"));
   }
 
