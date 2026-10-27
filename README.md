@@ -7,7 +7,7 @@ DX12MC (also called DXMC) is a client-side Fabric mod that renders Minecraft Jav
 
 The project is experimental and Windows-focused. It is a hobby project made to learn how graphics rendering works, and it does not claim to be better than any other renderer or mod.
 
-Download: [Modrinth](https://modrinth.com/mod/dx12mc) · [CurseForge](https://www.curseforge.com/projects/1768492)
+Download: [Modrinth](https://modrinth.com/mod/dx12mc) · [CurseForge](https://www.curseforge.com/minecraft/mc-mods/dx12mc)
 
 <p align="center">
   <img src="assets/dxmc-debug-overlay.png" alt="DXMC Debug Overlay" style="height: 200px; width: auto;">
