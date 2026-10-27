@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 240">
+  <defs>
+    <style>
+      .cls-1 {
+        stroke: #22c55e;
+      }
+
+      .cls-1, .cls-2 {
+        fill: none;
+        stroke-width: 14px;
+      }
+
+      .cls-3 {
+        fill: #166534;
+      }
+
+      .cls-2 {
+        stroke: #08190f;
+      }
+
+      .cls-4 {
+        fill: #16a34a;
+      }
+
+      .cls-5 {
+        fill: #84cc16;
+      }
+
+      .cls-6 {
+        fill: #a3e635;
+      }
+    </style>
+  </defs>
+  <g>
+    <polygon class="cls-6" points="115.6 32 153.4 53.9 115.6 75.8 77.8 53.9 115.6 32"/>
+    <polygon class="cls-5" points="153.4 53.9 191.2 75.8 153.4 97.7 115.6 75.8 153.4 53.9"/>
+    <polygon class="cls-6" points="115.6 75.8 153.4 97.7 115.6 119.6 77.8 97.7 115.6 75.8"/>
+    <polygon class="cls-5" points="77.8 53.9 115.6 75.8 77.8 97.7 40 75.8 77.8 53.9"/>
+    <polygon class="cls-4" points="40 75.8 115.6 119.6 115.6 207.2 40 163.4 40 75.8"/>
+    <polygon class="cls-3" points="115.6 119.6 191.2 75.8 191.2 163.4 115.6 207.2 115.6 119.6"/>
+  </g>
+  <g>
+    <g>
+      <path class="cls-2" d="M260,75h30l28,23v44l-28,23h-30v-90Z"/>
+      <path class="cls-2" d="M342,75l58,90M400,75l-58,90"/>
+      <path class="cls-2" d="M434,95l20-20v90M434,165h40"/>
+      <path class="cls-2" d="M506,75h58v45h-58v45h58"/>
+    </g>
+    <g>
+      <path class="cls-1" d="M588,165v-90l29,40,29-40v90"/>
+      <path class="cls-1" d="M728,75h-58v90h58"/>
+    </g>
+  </g>
+</svg>
