@@ -60,6 +60,18 @@ public final class RenderBench {
 
     String filter = args.length > 0 ? args[0] : "";
     if (filter.equals("verify")) {
+      net.dx12mc.graphics.Adapter adapter = backend.adapter();
+      System.out.println(
+          "adapter: "
+              + adapter.name()
+              + " | feature level "
+              + adapter.featureLevelName()
+              + " | driver "
+              + adapter.driver()
+              + " | raw "
+              + adapter.rawDriverVersion()
+              + " | F3: "
+              + adapter.rendererInfo("x.y.z").apiVersion());
       verify(backend, pipelines, context);
       exhaustTransient(backend, pipelines, context);
       int failures = PixelCheck.run(backend, pipelines);
