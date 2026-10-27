@@ -1,4 +1,7 @@
-# DX12MC
+<h1>
+  <img src="assets/dx12mc-icon-transparency.svg" alt="DX12MC Logo" height="32" style="vertical-align: middle;">
+  DX12MC
+</h1>
 
 DX12MC is a client-side Fabric mod that routes selected Minecraft Java rendering work through Direct3D 12 using bgfx.
 
