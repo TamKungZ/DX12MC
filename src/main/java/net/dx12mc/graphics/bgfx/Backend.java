@@ -32,6 +32,10 @@ public final class Backend implements AutoCloseable {
   private int viewClearFlags;
   private int viewClearRgba;
   private float viewClearDepth;
+  private final boolean[] viewHasFrameBuffer = new boolean[ViewSequence.MAX_VIEWS + 1];
+  private Target mainTarget;
+  private Target currentTarget;
+  private boolean presentView;
 
   public void initialize(
       long nativeWindow, FrameSize initialSize, int clearColorRgba, boolean debugText) {
@@ -85,6 +89,10 @@ public final class Backend implements AutoCloseable {
   }
 
   public void beginFrame(FrameSize newSize) {
+    beginFrame(newSize, null);
+  }
+
+  public void beginFrame(FrameSize newSize, Target mainRedirect) {
     ensureInitialized();
     swapChain.size(newSize);
     FrameSize size = swapChain.size();
@@ -92,6 +100,9 @@ public final class Backend implements AutoCloseable {
       bgfx_reset(size.width(), size.height(), swapChain.resetFlags(), BGFX_TEXTURE_FORMAT_COUNT);
     }
     ViewSequence.reset();
+    mainTarget = mainRedirect;
+    currentTarget = null;
+    presentView = false;
     viewClearFlags = BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH;
     viewClearRgba = clearColorRgba;
     viewClearDepth = 1.0f;
@@ -109,10 +120,49 @@ public final class Backend implements AutoCloseable {
     prepareView(ViewSequence.current());
   }
 
+  public boolean mainRedirected() {
+    return mainTarget != null;
+  }
+
+  public void bindTarget(Target target) {
+    ensureInitialized();
+    if (presentView || currentTarget == target) return;
+    currentTarget = target;
+    startView(target != null ? target : mainTarget);
+  }
+
+  public void beginPresentView() {
+    ensureInitialized();
+    presentView = true;
+    currentTarget = null;
+    startView(null);
+  }
+
+  private void startView(Target destination) {
+    if (ViewSequence.isUsed() || viewClearFlags != BGFX_CLEAR_NONE) ViewSequence.advance();
+    viewClearFlags = BGFX_CLEAR_NONE;
+    if (destination != null && destination.takeNeedsClear()) {
+      viewClearFlags = BGFX_CLEAR_COLOR | (destination.hasDepth() ? BGFX_CLEAR_DEPTH : 0);
+      viewClearRgba = 0;
+      viewClearDepth = 1.0f;
+    }
+    prepareView(ViewSequence.current());
+  }
+
   private void prepareView(int view) {
+    Target destination = presentView ? null : currentTarget != null ? currentTarget : mainTarget;
     FrameSize size = swapChain.size();
+    int width = destination != null ? destination.width() : size.width();
+    int height = destination != null ? destination.height() : size.height();
     bgfx_set_view_mode(view, BGFX_VIEW_MODE_SEQUENTIAL);
-    bgfx_set_view_rect(view, 0, 0, Math.min(size.width(), 0xFFFF), Math.min(size.height(), 0xFFFF));
+    bgfx_set_view_rect(view, 0, 0, Math.min(width, 0xFFFF), Math.min(height, 0xFFFF));
+    if (destination != null) {
+      bgfx_set_view_frame_buffer(view, destination.frameBuffer());
+      viewHasFrameBuffer[view] = true;
+    } else if (viewHasFrameBuffer[view]) {
+      bgfx_set_view_frame_buffer(view, BGFX_INVALID_HANDLE);
+      viewHasFrameBuffer[view] = false;
+    }
     bgfx_set_view_clear(view, viewClearFlags, viewClearRgba, viewClearDepth, 0);
     bgfx_touch(view);
   }
