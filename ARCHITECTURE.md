@@ -35,7 +35,7 @@ DX12MC hooks Minecraft at a small number of render and resource choke points:
 - `BufferUploader` for immediate mesh submissions.
 - `VertexBuffer` for persistent mesh uploads and draws.
 - `NativeImage`, `TextureUtil`, and texture-related calls for image upload data.
-- `GlStateManager`, `RenderSystem`, and `RenderTarget` where Minecraft still expects GL-shaped lifecycle or state calls, including clears, texture parameters and the bound render target.
+- `GlStateManager`, `RenderSystem`, and `RenderTarget` where Minecraft still expects GL-shaped lifecycle or state calls, including clears, texture parameters and the bound render target. `RenderTarget` binds, clears, destroys and screen blits are mirrored to native render targets, and `PostChain.process` runs natively.
 - `Window.updateVsync` and `Options` so video settings drive the D3D12 backend, and the Fabulous graphics mode is not offered.
 - `GlUtil` and `TimerQuery` so renderer information and GPU timing describe the D3D12 adapter instead of the bootstrap OpenGL context. The adapter's driver version and feature level are read once at startup and shared by F3, crash reports and the log.
 
@@ -51,7 +51,10 @@ The bridge is responsible for converting Minecraft render inputs into data the b
 - `bridge.state` tracks Minecraft render state separately from the bgfx bit encoder and scissor conversion.
 - `DrawContextFactory` resolves per-draw matrices, shader semantics, textures, and state without allocating on the steady-state path.
 - `graphics.pipeline.PipelineSet` owns pipeline resources and routes draws to the colour, texture, lightmapped, entity, line or end-portal pipeline, each with an alpha-test variant. The end-portal pipeline evaluates the vanilla end portal and end gateway layers from the game time and binds both of their textures. Opaque programs never discard, so they keep early depth testing.
-- Minecraft's mid-frame clears start a new sequential bgfx view on the backbuffer with the requested clear flags.
+- Minecraft's mid-frame clears start a new sequential bgfx view on the bound target with the requested clear flags.
+- `bridge.target.Targets` keeps one `graphics.bgfx.Target` (a bgfx frame buffer with an RGBA8 colour texture and an optional write-only depth buffer) per Minecraft `RenderTarget`, keyed by its colour texture id. A target is created the first time it is drawn into or sampled, and released after the next bgfx frame once Minecraft calls `destroyBuffers`. Binding a target starts a new view with `bgfx_set_view_frame_buffer` and the target's size; draws, clears and post passes after that go to it. Clears of a target Minecraft has not drawn into yet are kept until the first draw or read, so an unused outline target costs nothing.
+- The main target is the backbuffer unless the frame needs to read it, which is the case while a spectator effect is active, decided when the frame opens (`Controller.needsReadableMain`). Those frames render into a main `Target` and end with one blit view onto the backbuffer. A chain that reads the main target on any other frame is skipped.
+- `render.PostProcessor` runs `PostChain.process` for the programs in `graphics.pipeline.PostPipeline.Effect` (`blur`, `entity_outline`, `blit`, `invert`, `color_convolve`, `bits`, `spider`). Each pass is one view on the output target with the vanilla clear, a fullscreen triangle, uniform values read from the `EffectInstance`, and the filter mode of the input target (1.20.1 has no per-pass filter flag). The shaders sample with the OpenGL texture-coordinate convention flipped once in `post.sh`. A chain with a program that has no port is skipped and logged once.
 - Screenshots replace Minecraft's OpenGL readback with a bgfx screenshot of the last presented frame, then let Minecraft's own code save it.
 - `Bridge` is the native-rendering facade and coordinates draw submission across these components.
 
@@ -89,9 +92,10 @@ DX12MC does not try to make every Minecraft render path work by mixing native D3
 
 Examples of intentionally limited behavior:
 
-- the Fabulous graphics mode is not offered, because it needs OpenGL render targets and post-processing that DX12MC does not support yet;
-- OpenGL post chains (spectator effects, glowing-entity outlines) are skipped, and draws issued while an offscreen render target is bound are not drawn to the screen;
-- screenshots of offscreen render targets (panorama capture) are not supported.
+- the Fabulous graphics mode is not offered: it needs five more full-size targets, a depth copy between targets and the `transparency` program;
+- post chains with a program that has no native port (the F4 debug effects and Fabulous `transparency`) are skipped;
+- screenshots of offscreen render targets (panorama capture) are not supported, because bgfx completes a texture read frames after it is requested;
+- `rendertype_leash` interpolates its vertex colour, where the vanilla shader uses flat shading from the last vertex of each triangle.
 
 These limitations are tracked in source and tests so missing coverage is visible during development.
 
