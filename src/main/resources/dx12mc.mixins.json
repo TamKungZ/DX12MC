@@ -26,7 +26,9 @@
     "PostChainAccessor",
     "PostPassAccessor",
     "RenderTargetAccessor",
-    "GameRendererAccessor"
+    "GameRendererAccessor",
+    "TextureAtlasMixin",
+    "ReloadableResourceManagerMixin"
   ],
   "injectors": {
     "defaultRequire": 1
