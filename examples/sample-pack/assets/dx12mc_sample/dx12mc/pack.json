@@ -1,0 +1,42 @@
+{
+  "format": 1,
+  "contract": 1,
+  "programs": {
+    "lit": {
+      "vertex": "shaders/vs_block.dxsh",
+      "fragment": "shaders/fs_lit.dxsh"
+    },
+    "tint": {
+      "vertex": "shaders/vs_block.dxsh",
+      "fragment": "shaders/fs_tint.dxsh"
+    }
+  },
+  "overrides": {
+    "rendertype_solid": "lit",
+    "rendertype_cutout_mipped": "tint"
+  },
+  "uniforms": {
+    "u_light": {
+      "type": "vec4",
+      "value": [
+        0.35,
+        1.0,
+        0.55,
+        0.4
+      ]
+    },
+    "u_tint": {
+      "type": "vec4",
+      "value": [
+        1.0,
+        0.85,
+        0.6,
+        1.0
+      ]
+    }
+  },
+  "materials": {
+    "normal": true,
+    "specular": true
+  }
+}
