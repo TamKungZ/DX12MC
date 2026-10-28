@@ -31,12 +31,13 @@ The main boundary is the bridge layer under `net.dx12mc.bridge`. Minecraft-facin
 DX12MC hooks Minecraft at a small number of render and resource choke points:
 
 - `GameRenderer` for frame-level behavior and selected legacy effects.
-- `LevelRenderer` for section layer rendering.
+- `LevelRenderer` for section layer rendering, and the start and end of `renderLevel` for shader pack stages.
 - `BufferUploader` for immediate mesh submissions.
 - `VertexBuffer` for persistent mesh uploads and draws.
 - `NativeImage`, `TextureUtil`, and texture-related calls for image upload data.
 - `GlStateManager`, `RenderSystem`, and `RenderTarget` where Minecraft still expects GL-shaped lifecycle or state calls, including clears, texture parameters and the bound render target. `RenderTarget` binds, clears, destroys and screen blits are mirrored to native render targets, and `PostChain.process` runs natively.
 - `Window.updateVsync`, `Options`, and `OptionInstance` so video settings either drive the D3D12 backend or are shown as unavailable.
+- `ReloadableResourceManager` to add the shader pack loader to client resource reloads, and `TextureAtlas.upload` to record the block atlas sprite layout for material atlases.
 - `GlUtil` and `TimerQuery` so renderer information and GPU timing describe the D3D12 adapter instead of the bootstrap OpenGL context. The adapter's driver version and feature level are read once at startup and shared by F3, crash reports and the log.
 
 The project prefers semantic Minecraft hooks over raw OpenGL interception. Low-level GL hooks are kept narrow: they mirror state DX12MC needs or stop unsupported raw rendering from being hidden.
@@ -53,12 +54,13 @@ The bridge is responsible for converting Minecraft render inputs into data the b
 - `graphics.pipeline.PipelineSet` owns pipeline resources and routes draws to the colour, texture, lightmapped, entity, line or end-portal pipeline, each with an alpha-test variant. The end-portal pipeline evaluates the vanilla end portal and end gateway layers from the game time and binds both of their textures. Opaque programs never discard, so they keep early depth testing.
 - Minecraft's mid-frame clears start a new sequential bgfx view on the bound target with the requested clear flags.
 - `bridge.target.Targets` keeps one `graphics.bgfx.Target` (a bgfx frame buffer with an RGBA8 colour texture and an optional write-only depth buffer) per Minecraft `RenderTarget`, keyed by its colour texture id. A target is created the first time it is drawn into or sampled, and released after the next bgfx frame once Minecraft calls `destroyBuffers`. Binding a target starts a new view with `bgfx_set_view_frame_buffer` and the target's size; draws, clears and post passes after that go to it. Clears of a target Minecraft has not drawn into yet are kept until the first draw or read, so an unused outline target costs nothing.
-- The main target is the backbuffer unless the frame needs to read it: a menu blur or an active spectator effect, decided when the frame opens (`Controller.needsReadableMain`). Those frames render into a main `Target` and end with one blit view onto the backbuffer. A chain that reads the main target on any other frame is skipped.
+- The main target is the backbuffer unless the frame needs to read it: a menu blur, an active spectator effect, or a shader pack that uses the scene, decided when the frame opens (`Controller.ensureFrame`). Those frames render into a main `Target` and end with one blit view onto the backbuffer. A chain that reads the main target on any other frame is skipped.
 - `render.PostProcessor` runs `PostChain.process` for the programs in `graphics.pipeline.PostPipeline.Effect` (`box_blur`, `entity_outline`, `entity_outline_box_blur`, `blit`, `invert`, `color_convolve`, `bits`, `spider`). Each pass is one view on the output target with the vanilla clear, a fullscreen triangle, uniform values read from the `EffectInstance`, and the vanilla blend and filter mode. The shaders sample with the OpenGL texture-coordinate convention flipped once in `post.sh`. A chain with a program that has no port is skipped and logged once.
+- `pack` loads shader packs (see `docs/API.md`). `client.ShaderPackLoader` reads and validates them during the resource reload, off the render thread; `pack.PackSet` creates their native programs, uniforms, textures and targets at the next frame boundary and releases the previous set. `DrawContextFactory` resolves an override when the shader name changes, and `ShaderPipeline` submits the override program instead of the built-in one. With a G-buffer the pipelines switch to `_mrt` fragment variants that write zero to the extra attachments, from the first section layer until `renderLevel` returns. Errors in a pack disable it at the next frame boundary; they are not fatal.
 - Screenshots replace Minecraft's OpenGL readback with a bgfx screenshot of the last presented frame, then let Minecraft's own code save it.
 - `Bridge` is the native-rendering facade and coordinates draw submission across these components.
 
-The Minecraft-facing `Controller` remains the stable integration API. `RendererLifecycle` owns backend initialization, frame and present boundaries, fatal state, and shutdown; `SectionRenderContext` owns the reusable transforms for compiled section layers.
+The Minecraft-facing `Controller` is the integration point inside the mod. Other mods use only the `net.dx12mc.api` package in the `api` subproject, which depends on nothing in the mod. `RendererLifecycle` owns backend initialization, frame and present boundaries, fatal state, and shutdown; `SectionRenderContext` owns the reusable transforms for compiled section layers.
 
 The bridge keeps CPU mirrors for data that Minecraft may update asynchronously, such as sorted translucent indices or dirty texture regions. This lets DX12MC retry native work across frame boundaries without depending on stale OpenGL buffers.
 
