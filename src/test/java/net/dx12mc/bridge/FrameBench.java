@@ -20,6 +20,7 @@ import net.dx12mc.graphics.FrameSize;
 import net.dx12mc.graphics.bgfx.Backend;
 import net.dx12mc.graphics.bgfx.BenchViews;
 import net.dx12mc.graphics.bgfx.Mesh;
+import net.dx12mc.graphics.bgfx.Packing;
 import net.dx12mc.graphics.bgfx.ScreenCapture;
 import net.dx12mc.graphics.bgfx.Target;
 import net.dx12mc.graphics.bgfx.Texture;
@@ -84,6 +85,8 @@ final class FrameBench {
   record Page(Mesh mesh, int x, int y, int z, int vertices, int[] facings) {}
 
   private static final boolean FACING = Boolean.getBoolean("bench.facing");
+  private static final boolean ARENA = Boolean.getBoolean("bench.arena");
+  private net.dx12mc.graphics.bgfx.VertexArena arena;
   private static final int[] FACING_ORDER =
       Boolean.getBoolean("bench.facingSingle")
           ? new int[] {3, 1, 5, 6, 2, 4, 0}
@@ -838,7 +841,9 @@ final class FrameBench {
 
   private void flushStaging() {
     backend.beginFrame(new FrameSize(WIDTH, HEIGHT));
+    if (arena != null) arena.flush();
     backend.endFrame();
+    if (arena != null) arena.onFrameBoundary();
   }
 
   private long add(List<Page> pages, Quads quads, int rx, int ry, int rz) {
@@ -849,9 +854,17 @@ final class FrameBench {
       int[] facings = null;
       if (FACING && pages != translucent) facings = quads.sortByFacing(first, count);
       Batch batch = quads.batch(first, count);
+      Mesh mesh = null;
+      if (ARENA) {
+        if (arena == null) {
+          arena =
+              new net.dx12mc.graphics.bgfx.VertexArena(pipelines.layout(), Packing.VERTEX_STRIDE);
+        }
+        mesh = Mesh.createArena(batch, arena);
+      }
       pages.add(
           new Page(
-              Mesh.createSharedQuads(batch, pipelines.layout()),
+              mesh != null ? mesh : Mesh.createSharedQuads(batch, pipelines.layout()),
               rx * REGION_XZ,
               ry * REGION_Y,
               rz * REGION_XZ,
@@ -1145,6 +1158,7 @@ final class FrameBench {
     for (List<Page> pages : List.of(solid, cutout, translucent)) {
       for (Page page : pages) page.mesh().close();
     }
+    if (arena != null) arena.close();
     if (clouds != null) clouds.close();
     for (Texture texture :
         new Texture[] {atlas, lightmap, entityTexture, overlay, font, widgets, cloudTexture}) {
