@@ -46,4 +46,9 @@ vec2 dx12mcLightmapUv(vec2 _uv2, float _mode)
     if (_mode < 1.5) return clamp(_uv2 / 256.0, vec2_splat(0.5 / 16.0), vec2_splat(15.5 / 16.0));
     return (floor(_uv2 / 16.0) + vec2_splat(0.5)) / 16.0;
 }
+#ifdef DX12MC_SCENE_MRT
+#define dx12mcOutput(_color) gl_FragData[0] = _color; gl_FragData[1] = vec4_splat(0.0); gl_FragData[2] = vec4_splat(0.0); gl_FragData[3] = vec4_splat(0.0)
+#else
+#define dx12mcOutput(_color) gl_FragColor = _color
+#endif
 #endif
