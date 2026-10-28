@@ -3,5 +3,5 @@ $input v_color0, v_fog
 
 void main()
 {
-    gl_FragColor = vec4_splat(1.0);
+    dx12mcOutput(vec4_splat(1.0));
 }
