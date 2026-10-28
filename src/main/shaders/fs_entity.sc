@@ -13,5 +13,5 @@ void main()
 
     vec4 color = base * v_color0 * u_color;
     color.rgb = lerp(v_overlay.rgb, color.rgb, v_overlay.a);
-    gl_FragColor = dx12mcApplyFog(color * v_light, v_fog, u_fogParams, u_fogColor);
+    dx12mcOutput(dx12mcApplyFog(color * v_light, v_fog, u_fogParams, u_fogColor));
 }
