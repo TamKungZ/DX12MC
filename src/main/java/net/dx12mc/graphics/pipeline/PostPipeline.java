@@ -95,16 +95,7 @@ public final class PostPipeline implements AutoCloseable {
   public boolean draw(
       Effect effect, short color, short aux, boolean linear, float[] values, long state) {
     if (!started()) throw new IllegalStateException("post pipeline is not started");
-    try (MemoryStack stack = MemoryStack.stackPush()) {
-      BGFXTransientVertexBuffer vertices = BGFXTransientVertexBuffer.calloc(stack);
-      if (bgfx_get_avail_transient_vertex_buffer(3, layout.value()) < 3) return false;
-      bgfx_alloc_transient_vertex_buffer(vertices, 3, layout.value());
-      ByteBuffer data = vertices.data().order(ByteOrder.nativeOrder());
-      data.putFloat(-1.0f).putFloat(-1.0f).putFloat(0.0f);
-      data.putFloat(3.0f).putFloat(-1.0f).putFloat(0.0f);
-      data.putFloat(-1.0f).putFloat(3.0f).putFloat(0.0f);
-      bgfx_set_transient_vertex_buffer(0, vertices, 0, 3);
-    }
+    if (!fullscreenTriangle()) return false;
     long flags = linear ? LINEAR : POINT;
     bgfx_set_texture(0, uniforms[0], color, (int) flags);
     if (BGFX_HANDLE_IS_VALID(aux)) bgfx_set_texture(1, uniforms[1], aux, (int) flags);
@@ -114,6 +105,29 @@ public final class PostPipeline implements AutoCloseable {
     bgfx_submit(ViewSequence.current(), programs[effect.ordinal()].handle(), 0, BGFX_DISCARD_ALL);
     ViewSequence.used();
     return true;
+  }
+
+  public boolean drawProgram(short program, long state) {
+    if (!started()) throw new IllegalStateException("post pipeline is not started");
+    if (!fullscreenTriangle()) return false;
+    bgfx_set_state(state, 0);
+    bgfx_submit(ViewSequence.current(), program, 0, BGFX_DISCARD_ALL);
+    ViewSequence.used();
+    return true;
+  }
+
+  private boolean fullscreenTriangle() {
+    try (MemoryStack stack = MemoryStack.stackPush()) {
+      BGFXTransientVertexBuffer vertices = BGFXTransientVertexBuffer.calloc(stack);
+      if (bgfx_get_avail_transient_vertex_buffer(3, layout.value()) < 3) return false;
+      bgfx_alloc_transient_vertex_buffer(vertices, 3, layout.value());
+      ByteBuffer data = vertices.data().order(ByteOrder.nativeOrder());
+      data.putFloat(-1.0f).putFloat(-1.0f).putFloat(0.0f);
+      data.putFloat(3.0f).putFloat(-1.0f).putFloat(0.0f);
+      data.putFloat(-1.0f).putFloat(3.0f).putFloat(0.0f);
+      bgfx_set_transient_vertex_buffer(0, vertices, 0, 3);
+      return true;
+    }
   }
 
   private static float[] slice(float[] values, int offset) {
