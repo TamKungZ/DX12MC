@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "dx12mc_harness",
+  "version": "0",
+  "name": "DX12MC flight harness",
+  "environment": "client",
+  "mixins": [
+    "dx12mc_harness.mixins.json"
+  ],
+  "depends": {
+    "minecraft": "~1.21.1"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "package": "net.dx12mc.harness.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "MinecraftMixin",
+    "LevelRendererTimingMixin",
+    "GameRendererTimingMixin",
+    "SectionRenderDispatcherTimingMixin",
+    "RenderSystemTimingMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
