@@ -9,6 +9,7 @@ import java.util.function.Consumer;
 import net.dx12mc.bridge.Slot;
 import net.dx12mc.config.Config;
 import net.dx12mc.graphics.RendererInfo;
+import net.dx12mc.pack.MaterialAtlas;
 import net.dx12mc.render.Controller;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.PostChain;
@@ -18,9 +19,48 @@ import org.joml.Matrix4f;
 public final class Runtime implements AutoCloseable {
   public static final int NATIVE_GPU_PROFILE = 0;
   private final Controller controller;
+  private final Config config;
 
   public Runtime(Config config) {
+    this.config = config;
     this.controller = new Controller(config);
+  }
+
+  Api createApi(net.dx12mc.api.ApiVersion version) {
+    return new Api(controller, config.nativeMode(), version, Thread.currentThread());
+  }
+
+  public boolean shaderPacksEnabled() {
+    return config.nativeMode();
+  }
+
+  public void shaderPacksLoaded(ShaderPackLoader.Result result) {
+    controller.shaderPacksLoaded(result);
+  }
+
+  public void atlasUploaded(MaterialAtlas.Layout layout) {
+    controller.atlasUploaded(layout);
+  }
+
+  public void beginWorld(
+      Matrix4f cameraRotation,
+      Matrix4f projection,
+      double cameraX,
+      double cameraY,
+      double cameraZ,
+      float sunAngle,
+      float dayTime,
+      float partialTick) {
+    controller.beginWorld(
+        cameraRotation, projection, cameraX, cameraY, cameraZ, sunAngle, dayTime, partialTick);
+  }
+
+  public void endWorld() {
+    controller.endWorld();
+  }
+
+  public void afterLevel() {
+    controller.afterLevel();
   }
 
   public void initialize() {
