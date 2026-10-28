@@ -11,6 +11,7 @@ import net.dx12mc.graphics.bgfx.Packing;
 import net.dx12mc.graphics.bgfx.Program;
 import net.dx12mc.graphics.bgfx.Texture;
 import net.dx12mc.graphics.bgfx.ViewSequence;
+import net.dx12mc.pack.PackProgram;
 import org.lwjgl.bgfx.BGFXTransientIndexBuffer;
 import org.lwjgl.bgfx.BGFXTransientVertexBuffer;
 import org.lwjgl.system.MemoryStack;
@@ -22,10 +23,14 @@ final class ShaderPipeline implements AutoCloseable {
   private final DrawContext.Kind kind;
   private final Layout layout;
   private final Uniforms uniforms;
-  private final Program program;
-  private final Program alphaTestProgram;
-  private final Program logicInvertProgram;
-  private final Program logicInvertAlphaTestProgram;
+  private final String vertex;
+  private final String[] fragments;
+  private final Program[] defaults;
+  private Program[] mrt;
+  private Program program;
+  private Program alphaTestProgram;
+  private Program logicInvertProgram;
+  private Program logicInvertAlphaTestProgram;
 
   ShaderPipeline(
       DrawContext.Kind kind,
@@ -38,22 +43,43 @@ final class ShaderPipeline implements AutoCloseable {
     this.kind = kind;
     this.layout = layout;
     this.uniforms = uniforms;
+    this.vertex = vertex;
+    this.fragments =
+        logicInvert
+            ? new String[] {fragment, alphaTestFragment, "fs_logic_invert", "fs_logic_invert_alpha"}
+            : new String[] {fragment, alphaTestFragment};
+    defaults = loadAll("");
+    select(defaults);
+  }
+
+  private Program[] loadAll(String suffix) {
     Program[] loaded = new Program[4];
     try {
-      loaded[0] = load(vertex, fragment);
-      loaded[1] = load(vertex, alphaTestFragment);
-      if (logicInvert) {
-        loaded[2] = load(vertex, "fs_logic_invert");
-        loaded[3] = load(vertex, "fs_logic_invert_alpha");
-      }
+      for (int i = 0; i < fragments.length; i++) loaded[i] = load(vertex, fragments[i] + suffix);
     } catch (Throwable throwable) {
       for (Program program : loaded) if (program != null) program.close();
       throw throwable;
     }
-    program = loaded[0];
-    alphaTestProgram = loaded[1];
-    logicInvertProgram = loaded[2];
-    logicInvertAlphaTestProgram = loaded[3];
+    return loaded;
+  }
+
+  private void select(Program[] programs) {
+    program = programs[0];
+    alphaTestProgram = programs[1];
+    logicInvertProgram = programs[2];
+    logicInvertAlphaTestProgram = programs[3];
+  }
+
+  void mrt(boolean enabled) {
+    if (enabled && mrt == null) mrt = loadAll("_mrt");
+    select(enabled ? mrt : defaults);
+  }
+
+  void releaseMrt() {
+    select(defaults);
+    if (mrt == null) return;
+    for (Program loaded : mrt) if (loaded != null) loaded.close();
+    mrt = null;
   }
 
   private static Program load(String vertex, String fragment) {
@@ -95,10 +121,8 @@ final class ShaderPipeline implements AutoCloseable {
 
   @Override
   public void close() {
-    if (logicInvertAlphaTestProgram != null) logicInvertAlphaTestProgram.close();
-    if (logicInvertProgram != null) logicInvertProgram.close();
-    alphaTestProgram.close();
-    program.close();
+    releaseMrt();
+    for (Program loaded : defaults) if (loaded != null) loaded.close();
   }
 
   private boolean texturesValid(DrawContext context) {
@@ -129,6 +153,17 @@ final class ShaderPipeline implements AutoCloseable {
             state.scissorX(), state.scissorY(), state.scissorWidth(), state.scissorHeight());
       }
       bgfx_set_state(state.bgfxState() | context.primitive(), 0);
+    }
+    PackProgram override = context.override();
+    if (override != null && override.kind() == kind && state.logicInvertState() == 0L) {
+      if (!reuseState) override.bind(context);
+      bgfx_submit(
+          ViewSequence.current(),
+          override.handle(),
+          0,
+          preserveState ? SECTION_GEOMETRY_DISCARD : BGFX_DISCARD_ALL);
+      ViewSequence.used();
+      return true;
     }
     short handle = context.alphaTest() ? alphaTestProgram.handle() : program.handle();
     if (state.logicInvertState() != 0L) {
