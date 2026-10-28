@@ -7,5 +7,5 @@ void main()
 {
     if (u_material.y > 0.5 && v_color0.a < u_material.x) discard;
     if (u_material.y < 0.5 && (v_color0 * u_color).a < u_material.x) discard;
-    gl_FragColor = vec4_splat(1.0);
+    dx12mcOutput(vec4_splat(1.0));
 }
