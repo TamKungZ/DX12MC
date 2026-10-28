@@ -75,6 +75,7 @@ public final class RenderBench {
       verify(backend, pipelines, context);
       exhaustTransient(backend, pipelines, context);
       int failures = PixelCheck.run(backend, pipelines);
+      failures += PackPixelCheck.run(backend, pipelines);
       System.out.println("pixel checks failed: " + failures);
       pipelines.close();
       atlas.close();
