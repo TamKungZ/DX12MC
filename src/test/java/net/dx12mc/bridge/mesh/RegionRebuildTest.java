@@ -47,7 +47,10 @@ class RegionRebuildTest {
                   combined.vertexCount(),
                   combined.indexCount(),
                   combined.vertexCount() * 32L);
-            });
+            },
+            REBUILD_BUDGET,
+            Long.MAX_VALUE,
+            6L << 20);
     meshes = new MeshStore(stats);
   }
 
