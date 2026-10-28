@@ -24,6 +24,11 @@ public abstract class GameRendererMixin {
     }
   }
 
+  @Inject(method = "renderLevel", at = @At("RETURN"))
+  private void dx12mc$afterLevel(DeltaTracker deltaTracker, CallbackInfo ci) {
+    DX12MC.runtime().afterLevel();
+  }
+
   @Inject(
       method = "takeAutoScreenshot(Ljava/nio/file/Path;)V",
       at =
