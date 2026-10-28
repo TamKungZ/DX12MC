@@ -1,2 +1,3 @@
 src/main/shaders/*.sc -linguist-detectable
 src/main/shaders/*.sh -linguist-detectable
+api/api-signatures.txt text eol=lf

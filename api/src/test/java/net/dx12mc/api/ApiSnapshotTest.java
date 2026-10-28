@@ -18,15 +18,16 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 final class ApiSnapshotTest {
+  static final char BYTE_ORDER_MARK = (char) 0xFEFF;
+
   @Test
   void publicSignaturesMatchTheStoredSnapshot() throws Exception {
     Path snapshot = Path.of(System.getProperty("dx12mc.apiSnapshot"));
-    String actual = String.join("\n", signatures()) + "\n";
+    String actual = render(signatures());
     if (Boolean.parseBoolean(System.getProperty("dx12mc.updateApiSnapshot", "false"))) {
       Files.writeString(snapshot, actual, StandardCharsets.UTF_8);
     }
-    String expected =
-        Files.exists(snapshot) ? Files.readString(snapshot, StandardCharsets.UTF_8) : "";
+    String expected = stored(snapshot);
     assertEquals(
         expected,
         actual,
@@ -49,6 +50,30 @@ final class ApiSnapshotTest {
             "API signature uses a foreign type: " + token + " in " + line);
       }
     }
+  }
+
+  static String stored(Path snapshot) throws IOException {
+    return Files.exists(snapshot)
+        ? canonical(Files.readString(snapshot, StandardCharsets.UTF_8))
+        : "";
+  }
+
+  static String render(List<String> lines) {
+    return canonical(String.join("\n", lines));
+  }
+
+  static String canonical(String text) {
+    String body = !text.isEmpty() && text.charAt(0) == BYTE_ORDER_MARK ? text.substring(1) : text;
+    body = body.replace("\r\n", "\n").replace('\r', '\n');
+    int end = body.length();
+    while (end > 0 && body.charAt(end - 1) == '\n') end--;
+    return end == 0 ? "" : body.substring(0, end) + "\n";
+  }
+
+  static List<String> sortedMembers(List<String> members) {
+    List<String> sorted = new ArrayList<>(members);
+    sorted.sort(null);
+    return sorted;
   }
 
   static List<String> signatures() throws IOException, URISyntaxException {
@@ -86,8 +111,7 @@ final class ApiSnapshotTest {
         if (Modifier.isPublic(method.getModifiers()) && !method.isSynthetic())
           members.add("  " + method.toGenericString());
       }
-      members.sort(null);
-      lines.addAll(members);
+      lines.addAll(sortedMembers(members));
     }
     return lines;
   }

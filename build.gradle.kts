@@ -517,6 +517,13 @@ val googleJavaFormatJvmArgs = listOf(
     "--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED"
 )
 
+fun javaFormatArgumentFile(name: String): String {
+    val file = layout.buildDirectory.file("tmp/java-format/$name.args").get().asFile
+    file.parentFile.mkdirs()
+    file.writeText(javaSourceFiles().joinToString("\n", postfix = "\n") { it.absolutePath })
+    return "@" + file.absolutePath
+}
+
 tasks.register<JavaExec>("formatJava") {
     group = "formatting"
     description = "Formats Java source files with google-java-format."
@@ -525,7 +532,7 @@ tasks.register<JavaExec>("formatJava") {
     maxHeapSize = formatterMaxHeap
     jvmArgs(googleJavaFormatJvmArgs)
     args("--replace")
-    args(javaSourceFiles())
+    doFirst { args(javaFormatArgumentFile("format")) }
 }
 
 tasks.register<JavaExec>("checkJavaFormat") {
@@ -536,7 +543,7 @@ tasks.register<JavaExec>("checkJavaFormat") {
     maxHeapSize = formatterMaxHeap
     jvmArgs(googleJavaFormatJvmArgs)
     args("--dry-run", "--set-exit-if-changed")
-    args(javaSourceFiles())
+    doFirst { args(javaFormatArgumentFile("check")) }
 }
 
 tasks.test {
