@@ -4,7 +4,11 @@ import com.mojang.blaze3d.shaders.Uniform;
 import com.mojang.blaze3d.vertex.VertexBuffer;
 import net.dx12mc.DX12MC;
 import net.minecraft.client.Camera;
+import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.RenderType;
 import org.joml.Matrix4f;
 import org.spongepowered.asm.mixin.Mixin;
@@ -15,6 +19,46 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(LevelRenderer.class)
 public abstract class LevelRendererMixin {
+
+  @Inject(method = "renderLevel", at = @At("HEAD"))
+  private void dx12mc$beginWorld(
+      DeltaTracker deltaTracker,
+      boolean renderBlockOutline,
+      Camera camera,
+      GameRenderer gameRenderer,
+      LightTexture lightTexture,
+      Matrix4f cameraRotation,
+      Matrix4f projection,
+      CallbackInfo ci) {
+    var level = Minecraft.getInstance().level;
+    if (level == null) return;
+    float partialTick = deltaTracker.getGameTimeDeltaPartialTick(false);
+    var position = camera.getPosition();
+    DX12MC
+        .runtime()
+        .beginWorld(
+            cameraRotation,
+            projection,
+            position.x,
+            position.y,
+            position.z,
+            level.getSunAngle(partialTick),
+            level.getDayTime() % 24000L,
+            partialTick);
+  }
+
+  @Inject(method = "renderLevel", at = @At("RETURN"))
+  private void dx12mc$endWorld(
+      DeltaTracker deltaTracker,
+      boolean renderBlockOutline,
+      Camera camera,
+      GameRenderer gameRenderer,
+      LightTexture lightTexture,
+      Matrix4f cameraRotation,
+      Matrix4f projection,
+      CallbackInfo ci) {
+    DX12MC.runtime().endWorld();
+  }
 
   @Inject(
       method =
