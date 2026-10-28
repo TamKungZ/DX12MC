@@ -13,9 +13,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 import net.dx12mc.DX12MC;
+import net.dx12mc.api.PackStatus;
 import net.dx12mc.bridge.Bridge;
 import net.dx12mc.bridge.Slot;
 import net.dx12mc.bridge.Stats;
+import net.dx12mc.client.ShaderPackLoader;
 import net.dx12mc.config.Config;
 import net.dx12mc.graphics.RendererInfo;
 import net.dx12mc.graphics.bgfx.ScreenCapture;
@@ -23,6 +25,8 @@ import net.dx12mc.graphics.bgfx.Target;
 import net.dx12mc.graphics.bgfx.ViewSequence;
 import net.dx12mc.graphics.pipeline.PostPipeline;
 import net.dx12mc.mixin.GameRendererAccessor;
+import net.dx12mc.pack.MaterialAtlas;
+import net.dx12mc.pack.PackSet;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.PostChain;
@@ -42,6 +46,7 @@ public final class Controller implements AutoCloseable {
   private float clearDepth = 1.0f;
   private static final int GL_LINEAR = 9729;
   private final PostProcessor post;
+  private final ShaderPackHost packHost;
   private final Map<RenderTarget, PendingClear> pendingClears = new IdentityHashMap<>();
   private final float[] blitValues = new float[PostPipeline.UNIFORM_FLOATS];
   private RenderTarget boundTarget;
@@ -60,6 +65,94 @@ public final class Controller implements AutoCloseable {
     this.lifecycle = new RendererLifecycle(config, bridge, stats);
     this.clearRgba = config.clearColorRgba();
     this.post = bridge == null ? null : new PostProcessor(bridge, this);
+    this.packHost = bridge == null ? null : new ShaderPackHost(bridge);
+  }
+
+  public void connectApi(
+      PackSet.Providers providers, java.util.function.Consumer<List<PackStatus>> listener) {
+    if (packHost != null) packHost.connect(providers, listener);
+  }
+
+  public List<PackStatus> packStatuses() {
+    return packHost == null ? List.of() : packHost.statuses();
+  }
+
+  public net.dx12mc.graphics.Adapter adapter() {
+    return lifecycle.adapter();
+  }
+
+  public boolean active() {
+    return lifecycle.active();
+  }
+
+  public void shaderPacksLoaded(ShaderPackLoader.Result result) {
+    if (packHost != null) packHost.loaded(result);
+  }
+
+  public void atlasUploaded(MaterialAtlas.Layout layout) {
+    if (packHost != null) packHost.atlas(layout);
+  }
+
+  public void beginWorld(
+      Matrix4f cameraRotation,
+      Matrix4f projection,
+      double cameraX,
+      double cameraY,
+      double cameraZ,
+      float sunAngle,
+      float dayTime,
+      float partialTick) {
+    if (packHost == null || !packHost.active() || !lifecycle.active()) return;
+    Window window = Minecraft.getInstance().getWindow();
+    packHost.beginWorld(
+        cameraRotation,
+        projection,
+        cameraX,
+        cameraY,
+        cameraZ,
+        sunAngle,
+        dayTime,
+        partialTick,
+        window.getWidth(),
+        window.getHeight());
+  }
+
+  public void endWorld() {
+    if (packHost == null || !packHost.active() || !lifecycle.active()) return;
+    throwIfFailed();
+    try {
+      ensureFrame(Minecraft.getInstance());
+      packHost.endWorld(lifecycle);
+      if (packHost.hasStage("after_world")) runPackStage("after_world");
+    } catch (FatalRenderException fatal) {
+      throw fatal;
+    } catch (Throwable throwable) {
+      throw fatal("Shader pack stage after_world failed.", throwable);
+    }
+  }
+
+  public void afterLevel() {
+    if (packHost == null || !packHost.active() || !lifecycle.active()) return;
+    if (!packHost.hasStage("before_gui")) return;
+    throwIfFailed();
+    try {
+      ensureFrame(Minecraft.getInstance());
+      runPackStage("before_gui");
+    } catch (FatalRenderException fatal) {
+      throw fatal;
+    } catch (Throwable throwable) {
+      throw fatal("Shader pack stage before_gui failed.", throwable);
+    }
+  }
+
+  private void runPackStage(String stage) {
+    try {
+      packHost.runStage(stage, lifecycle);
+    } catch (RuntimeException exception) {
+      packHost.failed(
+          "shader pack stage " + stage + " failed: " + exception.getMessage(), exception);
+    }
+    appliedStale = true;
   }
 
   public void initialize() {
@@ -213,9 +306,7 @@ public final class Controller implements AutoCloseable {
   }
 
   Target nativeTarget(RenderTarget target) {
-    if (target == Minecraft.getInstance().getMainRenderTarget() && !lifecycle.mainRedirected()) {
-      return null;
-    }
+    if (target == Minecraft.getInstance().getMainRenderTarget()) return lifecycle.frameMain();
     return bridge.target(target);
   }
 
@@ -265,11 +356,24 @@ public final class Controller implements AutoCloseable {
 
   private void ensureFrame(Minecraft minecraft) {
     if (lifecycle.frameOpen()) return;
-    Target main =
-        needsReadableMain(minecraft) ? bridge.target(minecraft.getMainRenderTarget()) : null;
+    Target main = null;
+    if (packHost.active()) {
+      Window window = minecraft.getWindow();
+      try {
+        main = packHost.scene(Math.max(1, window.getWidth()), Math.max(1, window.getHeight()));
+      } catch (RuntimeException exception) {
+        packHost.failed(
+            "the shader pack scene target could not be created: " + exception.getMessage(),
+            exception);
+      }
+    }
+    if (main == null && needsReadableMain(minecraft)) {
+      main = bridge.target(minecraft.getMainRenderTarget());
+    }
     lifecycle.ensureFrame(minecraft, main);
     appliedTarget = null;
     appliedStale = false;
+    packHost.beginFrame();
   }
 
   private static boolean needsReadableMain(Minecraft minecraft) {
@@ -536,6 +640,7 @@ public final class Controller implements AutoCloseable {
     lifecycle.requireActive("section-layer draw");
     ensureFrame(minecraft);
     syncTarget();
+    if (packHost.active()) beginPackSectionLayer(renderType);
     Window window = minecraft.getWindow();
     section.begin(
         modelView, projection, window.getWidth(), window.getHeight(), cameraX, cameraY, cameraZ);
@@ -553,6 +658,17 @@ public final class Controller implements AutoCloseable {
           section.cameraX(),
           section.cameraY(),
           section.cameraZ());
+    }
+  }
+
+  private void beginPackSectionLayer(RenderType renderType) {
+    if (renderType == RenderType.translucent()) {
+      if (packHost.startTranslucent()) {
+        runPackStage("before_translucent");
+        syncTarget();
+      }
+    } else {
+      packHost.startOpaque(lifecycle);
     }
   }
 
@@ -654,6 +770,10 @@ public final class Controller implements AutoCloseable {
       captureInFlight = lifecycle.requestScreenCapture(minecraft);
     }
     lifecycle.present(minecraft);
+    if (packHost != null && lifecycle.active()) {
+      Window window = minecraft.getWindow();
+      packHost.frameBoundary(Math.max(1, window.getWidth()), Math.max(1, window.getHeight()));
+    }
   }
 
   public boolean openGlPresentationAllowed() {
