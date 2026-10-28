@@ -26,6 +26,8 @@ import net.dx12mc.graphics.bgfx.Texture;
 import net.dx12mc.graphics.bgfx.ViewSequence;
 import net.dx12mc.graphics.pipeline.PipelineSet;
 import net.dx12mc.graphics.pipeline.PostPipeline;
+import net.dx12mc.pack.PackDirectory;
+import net.dx12mc.pack.PackSet;
 import org.joml.FrustumIntersection;
 import org.joml.Matrix4f;
 import org.lwjgl.bgfx.BGFXStats;
@@ -52,6 +54,8 @@ final class FrameBench {
   private final boolean profile;
   private final boolean f3;
   private final String effect;
+  private final String pack;
+  private PackSet packs;
   private final PostPipeline post = new PostPipeline();
   private final float[] postValues = new float[PostPipeline.UNIFORM_FLOATS];
   private Target mainTarget;
@@ -86,9 +90,15 @@ final class FrameBench {
           : new int[] {0, 2, 4, 6, 5, 3, 1};
 
   private FrameBench(
-      Backend backend, PipelineSet pipelines, boolean profile, boolean f3, String effect) {
+      Backend backend,
+      PipelineSet pipelines,
+      boolean profile,
+      boolean f3,
+      String effect,
+      String pack) {
     this.backend = backend;
     this.effect = effect;
+    this.pack = pack;
     this.pipelines = pipelines;
     this.profile = profile;
     this.f3 = f3;
@@ -102,11 +112,13 @@ final class FrameBench {
       if (arg.startsWith("repeat=")) repeats = Integer.parseInt(arg.substring(7));
     String effect = null;
     String compare = null;
+    String pack = null;
     for (String arg : args) {
+      if (arg.startsWith("pack=")) pack = arg.substring(5);
       if (arg.startsWith("effect=")) effect = arg.substring(7);
       if (arg.startsWith("compare=")) compare = arg.substring(8);
     }
-    FrameBench bench = new FrameBench(backend, pipelines, profile, has(args, "f3"), effect);
+    FrameBench bench = new FrameBench(backend, pipelines, profile, has(args, "f3"), effect, pack);
     try {
       bench.build();
       bench.startPost();
@@ -223,7 +235,9 @@ final class FrameBench {
   private void frame() {
     FrameSize size = new FrameSize(WIDTH, HEIGHT);
     passNames.clear();
-    backend.beginFrame(size, effect == null ? null : mainTarget);
+    Target scene = packs != null ? packs.scene(WIDTH, HEIGHT) : null;
+    backend.beginFrame(size, scene != null ? scene : effect == null ? null : mainTarget);
+    if (packs != null) packs.beginFrame();
     float[] fog = {0.02f, 0.03f, 0.06f, 1.0f};
     backend.clear(
         ViewSequence.GL_COLOR_BUFFER_BIT | ViewSequence.GL_DEPTH_BUFFER_BIT,
@@ -232,6 +246,11 @@ final class FrameBench {
     camera(frameYaw());
     pass("sky");
     sky();
+    if (packs != null && packs.gbuffer()) {
+      backend.clearMainAttachments();
+      backend.mainMrt(true);
+      pipelines.mrt(true);
+    }
     pass("solid");
     drawnPages = 0;
     drawnVertices = 0;
@@ -240,6 +259,7 @@ final class FrameBench {
     terrain(cutout, "rendertype_cutout_mipped", false, fog);
     pass("entities");
     entities(fog);
+    stage("before_translucent");
     pass("translucent");
     terrain(translucent, "rendertype_translucent", true, fog);
     pass("particles");
@@ -250,14 +270,42 @@ final class FrameBench {
       pass("portal");
       endPortal();
     }
+    if (packs != null && packs.gbuffer()) {
+      backend.mainMrt(false);
+      pipelines.mrt(false);
+    }
+    stage("after_world");
     backend.clear(ViewSequence.GL_DEPTH_BUFFER_BIT, 0, 1.0f);
     pass("hand");
     hand();
+    stage("before_gui");
     backend.clear(ViewSequence.GL_DEPTH_BUFFER_BIT, 0, 1.0f);
     pass("gui");
     gui();
     if (effect != null) postProcess();
+    else if (scene != null) present(scene);
     backend.endFrame();
+  }
+
+  private void stage(String stage) {
+    if (packs == null || !packs.hasStage(stage)) return;
+    packs.runStage(stage, backend::bindTarget, post);
+    backend.bindTarget(null);
+  }
+
+  private void present(Target scene) {
+    backend.beginPresentView();
+    sizes(scene, scene);
+    postValues[4] = postValues[5] = postValues[6] = postValues[7] = 1.0f;
+    if (!post.draw(
+        PostPipeline.Effect.BLIT,
+        scene.colorTexture(),
+        BGFX_INVALID_HANDLE,
+        false,
+        postValues,
+        post.blendState(false, false))) {
+      throw new IllegalStateException("present blit rejected");
+    }
   }
 
   private void postProcess() {
@@ -334,6 +382,13 @@ final class FrameBench {
     frustum.set(projection);
     world.identity().m22(0.5f).m32(0.5f).mul(projection);
     fogModel.set(world).invert();
+    if (packs != null) {
+      packs
+          .frame()
+          .camera(
+              projection, new Matrix4f(), CAMERA_X, cameraY, CAMERA_Z, 0.5f, 6000.0f, 0.0f, 0.0f);
+      packs.frame().viewSize(WIDTH, HEIGHT);
+    }
   }
 
   private void terrain(List<Page> pages, String program, boolean farFirst, float[] fogColor) {
@@ -352,6 +407,7 @@ final class FrameBench {
     prepare(context, semantics, fogColor, 172.8f, 192.0f, 1);
     ShaderInputs.light(semantics, true, false, false, context.lightParams());
     context.textureLod()[0] = atlas.maxLod();
+    context.override = packs == null ? null : packs.override(program);
     context.set(
         DrawContext.Kind.TEXTURE_LIGHT,
         atlas,
@@ -1059,6 +1115,21 @@ final class FrameBench {
   }
 
   private void startPost() {
+    if (pack != null) {
+      post.start();
+      packs = new PackSet();
+      packs.apply(
+          List.of(PackDirectory.plan(pack)),
+          List.of(),
+          (name, values) -> {
+            while (values.hasRemaining()) values.put(1.0f);
+            return true;
+          },
+          WIDTH,
+          HEIGHT);
+      System.out.println("frame pack " + pack + ": " + packs.statuses());
+      return;
+    }
     if (effect == null) return;
     post.start();
     mainTarget = Target.create(WIDTH, HEIGHT, true);
@@ -1066,6 +1137,8 @@ final class FrameBench {
   }
 
   private void close() {
+    if (packs != null) packs.close();
+    pipelines.releaseMrt();
     if (mainTarget != null) mainTarget.close();
     if (swapTarget != null) swapTarget.close();
     post.close();
