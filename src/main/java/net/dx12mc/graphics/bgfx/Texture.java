@@ -56,6 +56,8 @@ public final class Texture implements AutoCloseable {
     BGFXMemory memory =
         StagingMemory.allocate(bytes, target -> target.put(rgba, sourceOffset, bytes));
     bgfx_update_texture_2d(handle, 0, level, x, y, width, height, memory, 0xFFFF);
+    if (net.dx12mc.bridge.Profile.ENABLED)
+      net.dx12mc.bridge.Profile.count(net.dx12mc.bridge.Profile.Count.TEXTURE_UPLOADS, 1);
   }
 
   public short handle() {
