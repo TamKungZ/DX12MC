@@ -62,31 +62,32 @@ final class PerformanceTelemetry {
     double seconds = elapsed / 1_000_000_000.0;
     DX12MC.LOGGER.info(
         String.format(
-            Locale.ROOT,
-            "DX12MC PERF %.1fs: %.1f fps, submits/frame %.1f, bgfx draws %.0f,"
-                + " vertices/frame %.0f, indices/frame %.0f, opaque sections/pages %.1f/%.1f,"
-                + " region rebuilds/deferred +%d/+%d, texture updates/frame %.2f (%.1f KiB),"
-                + " skipped draws sections/texture-not-ready/transient +%d/+%d/+%d,"
-                + " bgfx avg CPU/GPU/wait-submit/wait-render %.3f/%.3f/%.3f/%.3f ms",
-            seconds,
-            frames / seconds,
-            average(submits),
-            average(draws),
-            average(vertices),
-            average(indices),
-            average(regionSections),
-            average(regionPages),
-            rebuilds - previousRebuilds,
-            rebuildDeferrals - previousRebuildDeferrals,
-            (textureCalls - previousTextureCalls) / (double) Math.max(1L, frames),
-            (textureBytes - previousTextureBytes) / 1024.0 / Math.max(1L, frames),
-            stats.deferredSectionDraws() - previousDeferredSections,
-            stats.textureNotReadyDraws() - previousNotReady,
-            stats.transientPressureDraws() - previousTransientPressure,
-            averageMillis(cpuMillis),
-            averageMillis(gpuMillis),
-            averageMillis(waitSubmitMillis),
-            averageMillis(waitRenderMillis)));
+                Locale.ROOT,
+                "DX12MC PERF %.1fs: %.1f fps, submits/frame %.1f, bgfx draws %.0f,"
+                    + " vertices/frame %.0f, indices/frame %.0f, opaque sections/pages %.1f/%.1f,"
+                    + " region rebuilds/deferred +%d/+%d, texture updates/frame %.2f (%.1f KiB),"
+                    + " skipped draws sections/texture-not-ready/transient +%d/+%d/+%d,"
+                    + " bgfx avg CPU/GPU/wait-submit/wait-render %.3f/%.3f/%.3f/%.3f ms",
+                seconds,
+                frames / seconds,
+                average(submits),
+                average(draws),
+                average(vertices),
+                average(indices),
+                average(regionSections),
+                average(regionPages),
+                rebuilds - previousRebuilds,
+                rebuildDeferrals - previousRebuildDeferrals,
+                (textureCalls - previousTextureCalls) / (double) Math.max(1L, frames),
+                (textureBytes - previousTextureBytes) / 1024.0 / Math.max(1L, frames),
+                stats.deferredSectionDraws() - previousDeferredSections,
+                stats.textureNotReadyDraws() - previousNotReady,
+                stats.transientPressureDraws() - previousTransientPressure,
+                averageMillis(cpuMillis),
+                averageMillis(gpuMillis),
+                averageMillis(waitSubmitMillis),
+                averageMillis(waitRenderMillis))
+            + (net.dx12mc.bridge.Profile.ENABLED ? net.dx12mc.bridge.Profile.drain(frames) : ""));
     long rebuildFailures = stats.regionRebuildFailures();
     if (rebuildFailures != previousRebuildFailures) {
       DX12MC.LOGGER.warn(
