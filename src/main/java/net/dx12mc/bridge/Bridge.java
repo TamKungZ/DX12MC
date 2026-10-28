@@ -19,6 +19,7 @@ import net.dx12mc.graphics.bgfx.Target;
 import net.dx12mc.graphics.bgfx.TransientPressure;
 import net.dx12mc.graphics.pipeline.PipelineSet;
 import net.dx12mc.graphics.pipeline.PostPipeline;
+import net.dx12mc.pack.PackSet;
 import org.joml.Matrix4f;
 
 public final class Bridge implements AutoCloseable {
@@ -32,6 +33,7 @@ public final class Bridge implements AutoCloseable {
   private final PipelineSet pipelines = new PipelineSet();
   private final PostPipeline post = new PostPipeline();
   private final Targets targets = new Targets();
+  private final PackSet packs = new PackSet();
   private final Encoder.Scratch immediateScratch = new Encoder.Scratch();
   private DrawContext activeSectionContext;
   private String semanticIntent = "frame";
@@ -43,7 +45,8 @@ public final class Bridge implements AutoCloseable {
     this.meshes = new MeshStore(stats);
     this.regions = new SectionRegionBatcher(stats);
     this.textures = new Registry(stats);
-    this.contexts = new DrawContextFactory(textures);
+    this.contexts = new DrawContextFactory(textures, packs);
+    packs.textureLookup(textures::resolve);
   }
 
   public void start() {
@@ -82,6 +85,14 @@ public final class Bridge implements AutoCloseable {
 
   public void releaseTarget(RenderTarget renderTarget) {
     targets.release(renderTarget.getColorTextureId());
+  }
+
+  public PackSet packs() {
+    return packs;
+  }
+
+  public PipelineSet pipelines() {
+    return pipelines;
   }
 
   public PostPipeline post() {
@@ -470,7 +481,7 @@ public final class Bridge implements AutoCloseable {
   public void close() {
     RuntimeException failure = null;
     for (AutoCloseable resource :
-        new AutoCloseable[] {regions, meshes, textures, targets, post, pipelines}) {
+        new AutoCloseable[] {regions, meshes, textures, targets, packs, post, pipelines}) {
       try {
         resource.close();
       } catch (Exception exception) {
