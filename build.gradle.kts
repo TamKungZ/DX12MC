@@ -191,6 +191,7 @@ val prepareShaderc by tasks.registering {
 }
 
 apply(from = "tools/shaderpack.gradle.kts")
+apply(from = "tools/harness.gradle.kts")
 
 val validateD3D12ShaderSources by tasks.registering {
     group = "dx12mc verification"
@@ -459,6 +460,16 @@ loom {
             vmArg("-Ddx12mc.mode=${mode.get()}")
             vmArg("-Ddx12mc.clear=${clear.get()}")
             vmArg("-Ddx12mc.overlay=${overlay.get()}")
+        }
+        create("harness") {
+            client()
+            configName = "DX12MC flight harness"
+            runDir = "build/harness-run"
+            source(sourceSets["harness"])
+            vmArg("-Ddx12mc.harness=flight")
+            vmArg("-Ddx12mc.mode=" + (findProperty("harnessMode") as String? ?: "native"))
+            (findProperty("harnessJvm") as String?)?.split(Regex("[ ,]"))?.filter { it.isNotEmpty() }?.forEach { vmArg(it) }
+            programArgs("--width", "1920", "--height", "1009")
         }
     }
 }
