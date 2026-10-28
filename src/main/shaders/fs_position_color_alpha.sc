@@ -10,5 +10,5 @@ void main()
     if (u_material.y > 0.5 && v_color0.a < u_material.x) discard;
     vec4 color = v_color0 * u_color;
     if (u_material.y < 0.5 && color.a < u_material.x) discard;
-    gl_FragColor = dx12mcApplyFog(color, v_fog, u_fogParams, u_fogColor);
+    dx12mcOutput(dx12mcApplyFog(color, v_fog, u_fogParams, u_fogColor));
 }
