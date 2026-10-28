@@ -32,6 +32,7 @@ For rendering changes, the diagnostic tasks measure the local GPU and are not pa
 
 - `renderBench` measures bgfx submission cost and has a native correctness check (`-PbenchArgs=verify`).
 - `cpuBench` times the CPU-side encoding, packing and region assembly paths.
+- `runHarness` starts the client from `build/harness-run` with a dev-only harness (`src/harness`, not in the mod jar) that creates a fresh world with a fixed seed, flies a fixed route and logs frame times per phase. `-PharnessMode=probe` runs the same route with vanilla OpenGL rendering.
 
 Report measured numbers with the method and hardware when a change claims a performance improvement. Do not claim an improvement that was not measured.
 
