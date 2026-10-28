@@ -2,6 +2,7 @@ package net.dx12mc.bridge;
 
 import net.dx12mc.bridge.state.RenderState;
 import net.dx12mc.graphics.bgfx.Texture;
+import net.dx12mc.pack.PackProgram;
 
 public final class DrawContext {
   public enum Kind {
@@ -50,6 +51,7 @@ public final class DrawContext {
   private Texture overlay;
   private boolean alphaTest;
   private RenderState.Snapshot state;
+  PackProgram override;
 
   public DrawContext set(
       Kind kind,
@@ -65,6 +67,10 @@ public final class DrawContext {
     this.alphaTest = alphaTest;
     this.state = state;
     return this;
+  }
+
+  public PackProgram override() {
+    return override;
   }
 
   public Kind kind() {
