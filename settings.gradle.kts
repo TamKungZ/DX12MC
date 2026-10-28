@@ -10,3 +10,4 @@ pluginManagement {
     }
 }
 rootProject.name = "DX12MC"
+include("api")
