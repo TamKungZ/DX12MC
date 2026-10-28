@@ -36,6 +36,7 @@ public final class Backend implements AutoCloseable {
   private Target mainTarget;
   private Target currentTarget;
   private boolean presentView;
+  private boolean mainMrt;
 
   public void initialize(
       long nativeWindow, FrameSize initialSize, int clearColorRgba, boolean debugText) {
@@ -103,6 +104,7 @@ public final class Backend implements AutoCloseable {
     mainTarget = mainRedirect;
     currentTarget = null;
     presentView = false;
+    mainMrt = false;
     viewClearFlags = BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH;
     viewClearRgba = clearColorRgba;
     viewClearDepth = 1.0f;
@@ -131,6 +133,29 @@ public final class Backend implements AutoCloseable {
     startView(target != null ? target : mainTarget);
   }
 
+  public void mainMrt(boolean enabled) {
+    ensureInitialized();
+    if (mainTarget == null || !mainTarget.hasMrt() || mainMrt == enabled) return;
+    mainMrt = enabled;
+    if (!presentView && currentTarget == null) startView(mainTarget);
+  }
+
+  public void clearMainAttachments() {
+    ensureInitialized();
+    if (presentView || mainTarget == null || !mainTarget.hasMrt()) return;
+    if (ViewSequence.isUsed() || viewClearFlags != BGFX_CLEAR_NONE) ViewSequence.advance();
+    int view = ViewSequence.current();
+    bgfx_set_view_mode(view, BGFX_VIEW_MODE_SEQUENTIAL);
+    bgfx_set_view_rect(view, 0, 0, mainTarget.width(), mainTarget.height());
+    bgfx_set_view_frame_buffer(view, mainTarget.extrasFrameBuffer());
+    viewHasFrameBuffer[view] = true;
+    bgfx_set_view_clear(view, BGFX_CLEAR_COLOR, 0, 1.0f, 0);
+    bgfx_touch(view);
+    ViewSequence.used();
+    viewClearFlags = BGFX_CLEAR_NONE;
+    startView(currentTarget != null ? currentTarget : mainTarget);
+  }
+
   public void beginPresentView() {
     ensureInitialized();
     presentView = true;
@@ -157,7 +182,11 @@ public final class Backend implements AutoCloseable {
     bgfx_set_view_mode(view, BGFX_VIEW_MODE_SEQUENTIAL);
     bgfx_set_view_rect(view, 0, 0, Math.min(width, 0xFFFF), Math.min(height, 0xFFFF));
     if (destination != null) {
-      bgfx_set_view_frame_buffer(view, destination.frameBuffer());
+      bgfx_set_view_frame_buffer(
+          view,
+          mainMrt && destination == mainTarget
+              ? destination.mrtFrameBuffer()
+              : destination.frameBuffer());
       viewHasFrameBuffer[view] = true;
     } else if (viewHasFrameBuffer[view]) {
       bgfx_set_view_frame_buffer(view, BGFX_INVALID_HANDLE);
