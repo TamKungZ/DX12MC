@@ -6,5 +6,5 @@ uniform vec4 u_fogParams;
 uniform vec4 u_fogColor;
 void main()
 {
-    gl_FragColor = dx12mcApplyFog(v_color0 * u_color, v_fog, u_fogParams, u_fogColor);
+    dx12mcOutput(dx12mcApplyFog(v_color0 * u_color, v_fog, u_fogParams, u_fogColor));
 }
