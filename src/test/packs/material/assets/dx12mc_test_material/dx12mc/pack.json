@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "contract": 1,
+  "programs": {
+    "material": {
+      "vertex": "shaders/vs_block.dxsh",
+      "fragment": "shaders/fs_material.dxsh"
+    }
+  },
+  "overrides": {
+    "rendertype_solid": "material"
+  },
+  "materials": {
+    "normal": true,
+    "specular": true
+  }
+}
