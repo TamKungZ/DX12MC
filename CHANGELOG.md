@@ -4,6 +4,17 @@ Note: 0.9.0 is the version that fixes the low FPS problem. On a GT1030 it perfor
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
+## 0.12.1 - API and shader packs
+
+- Add an experimental API for other mods (API version 0.1) in the `dx12mc-api` jar, which is also bundled in the mod. Mods register through a `dx12mc` Fabric entrypoint and can read whether the renderer is active, its version and the adapter, supply uniform values, and get notified when shader packs load. The API must be used on the render thread. See `docs/API.md`.
+- Load shader packs from resource packs (`assets/<namespace>/dx12mc/pack.json`) with precompiled shaders. A pack can replace the programs of terrain and entity render types, add programs, uniforms and textures, render the world into a G-buffer of up to three extra colour targets, sample the scene colour and depth, and run fullscreen passes before translucent terrain, after the world and before the GUI. Packs reload with F3+T.
+- Check every pack shader before it reaches bgfx: container header, shader contract, profile, bgfx binary layout, DXBC checksum, stage, vertex attributes, varyings, uniforms and sampler slots. A pack that fails a check or fails while running is disabled with a log line and the built-in shaders are used. Packs from a server are not loaded unless `-Ddx12mc.pack.allowServer=true` is set, and packs may use at most 256 MiB of targets and textures.
+- Build normal and specular atlases from `_n` and `_s` companion textures with the block atlas layout and mip levels, only when an active pack asks for them.
+- Add `compileShaderPack`, which compiles a pack with the pinned shaderc, and a sample pack under `examples/sample-pack` with a tint override and a normal and roughness override.
+- The built-in fragment shaders have G-buffer variants that are loaded only for a pack with a G-buffer. The default shader binaries are unchanged.
+- In the `renderBench` frame scenario on a GT 1030, alternating runs of this version and 0.12.0 without a pack gave 3.34 ms and 3.36 ms of GPU time, and the capture has no differing pixels. The sample pack cost about 0.55 ms more, a tint override 0.1 ms and a G-buffer pack with one pass 0.66 ms. These are benchmark results, not in-game measurements.
+- Add `renderBench` pixel checks for overrides, rejected binaries, the G-buffer, depth reads, custom passes, material atlas placement and releasing pack resources on reload.
+
 ## 0.12.0 - Native render targets and post-processing
 
 - Mirror Minecraft's offscreen render targets as bgfx frame buffers. A target gets a colour texture and, when Minecraft asked for one, a depth buffer the first time it is bound or sampled, and is released when Minecraft destroys it. Draws aimed at a target are drawn into it instead of being skipped, and clears of a target are applied to its own view. Before, every draw aimed at a render target other than the main one was dropped.
