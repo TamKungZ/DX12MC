@@ -43,5 +43,5 @@ void main()
         xy = xy * 0.5 + vec2_splat(0.25 * p.w);
         color += dx12mcTexture2DLevel(s_overlay, xy / p.w, 0.0).rgb * COLORS[i];
     }
-    gl_FragColor = vec4(color, 1.0);
+    dx12mcOutput(vec4(color, 1.0));
 }
