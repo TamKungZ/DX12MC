@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "contract": 1,
+  "programs": {
+    "depth": {
+      "fragment": "shaders/fs_depth.dxsh"
+    }
+  },
+  "scene": {
+    "depth": true
+  },
+  "passes": [
+    {
+      "stage": "before_gui",
+      "program": "depth",
+      "inputs": {
+        "s_depth": "scene:depth"
+      },
+      "output": "scene:color"
+    }
+  ]
+}
