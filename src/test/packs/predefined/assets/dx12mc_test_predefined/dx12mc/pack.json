@@ -1,0 +1,20 @@
+{
+  "format": 1,
+  "contract": 1,
+  "programs": {
+    "p": {
+      "fragment": "shaders/fs_predefined.dxsh"
+    }
+  },
+  "targets": {
+    "t": {}
+  },
+  "passes": [
+    {
+      "stage": "before_gui",
+      "program": "p",
+      "inputs": {},
+      "output": "target:t"
+    }
+  ]
+}
