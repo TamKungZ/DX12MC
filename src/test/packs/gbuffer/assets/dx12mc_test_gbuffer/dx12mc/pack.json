@@ -1,0 +1,35 @@
+{
+  "format": 1,
+  "contract": 1,
+  "programs": {
+    "gbuffer": {
+      "vertex": "shaders/vs_block.dxsh",
+      "fragment": "shaders/fs_gbuffer.dxsh"
+    },
+    "show": {
+      "fragment": "shaders/fs_show.dxsh"
+    }
+  },
+  "overrides": {
+    "rendertype_solid": "gbuffer"
+  },
+  "scene": {
+    "gbuffer": [
+      {
+        "name": "normal",
+        "format": "rgba8"
+      }
+    ],
+    "depth": true
+  },
+  "passes": [
+    {
+      "stage": "after_world",
+      "program": "show",
+      "inputs": {
+        "s_input": "scene:normal"
+      },
+      "output": "scene:color"
+    }
+  ]
+}
