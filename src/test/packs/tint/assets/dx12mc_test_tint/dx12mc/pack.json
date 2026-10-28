@@ -1,0 +1,24 @@
+{
+  "format": 1,
+  "contract": 1,
+  "programs": {
+    "tint": {
+      "vertex": "shaders/vs_block.dxsh",
+      "fragment": "shaders/fs_tint.dxsh"
+    }
+  },
+  "overrides": {
+    "rendertype_solid": "tint"
+  },
+  "uniforms": {
+    "u_tint": {
+      "type": "vec4",
+      "value": [
+        0.5,
+        1.0,
+        0.25,
+        1.0
+      ]
+    }
+  }
+}
