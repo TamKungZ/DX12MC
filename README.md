@@ -23,7 +23,7 @@ Offscreen render targets and post-processing run on Direct3D 12, which covers me
 
 It is not a complete OpenGL replacement. The Fabulous graphics mode is not offered, and panorama and other offscreen screenshots do not work. If something needs a path that does not exist yet, the mod stops with an error instead of falling back to OpenGL.
 
-See `ARCHITECTURE.md` for a source-level overview.
+See `ARCHITECTURE.md` for a source-level overview, and `docs/API.md` for the experimental API and shader pack format for other mods.
 
 ## License
 
