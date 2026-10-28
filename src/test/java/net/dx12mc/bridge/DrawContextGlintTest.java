@@ -28,7 +28,8 @@ class DrawContextGlintTest {
 
   @Test
   void glintAlphaScalesColorButNotAlphaLikeTheVanillaGlintShaders() {
-    DrawContextFactory factory = new DrawContextFactory(new Registry(new Stats()));
+    DrawContextFactory factory =
+        new DrawContextFactory(new Registry(new Stats()), new net.dx12mc.pack.PackSet());
     float[] tint = factory.context().tint();
     tint[0] = 1.0f;
     tint[1] = 0.5f;
