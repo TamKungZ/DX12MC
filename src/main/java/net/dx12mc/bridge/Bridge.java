@@ -17,14 +17,13 @@ import net.dx12mc.graphics.bgfx.Packing;
 import net.dx12mc.graphics.bgfx.StagingBackpressureException;
 import net.dx12mc.graphics.bgfx.Target;
 import net.dx12mc.graphics.bgfx.TransientPressure;
+import net.dx12mc.graphics.bgfx.VertexArena;
 import net.dx12mc.graphics.pipeline.PipelineSet;
 import net.dx12mc.graphics.pipeline.PostPipeline;
 import net.dx12mc.pack.PackSet;
 import org.joml.Matrix4f;
 
 public final class Bridge implements AutoCloseable {
-  private static final long STREAM_BYTES_PER_FRAME =
-      Math.max(1L << 20, Long.getLong("dx12mc.stream.bytesPerFrame", 6L << 20));
   private final Stats stats;
   private final MeshStore meshes;
   private final SectionRegionBatcher regions;
@@ -35,10 +34,13 @@ public final class Bridge implements AutoCloseable {
   private final Targets targets = new Targets();
   private final PackSet packs = new PackSet();
   private final Encoder.Scratch immediateScratch = new Encoder.Scratch();
+  private static final boolean MESH_ARENA =
+      Boolean.parseBoolean(System.getProperty("dx12mc.mesh.arena", "true"));
+  private VertexArena vertexArena;
+  private VertexArena indexArena;
   private DrawContext activeSectionContext;
   private String semanticIntent = "frame";
   private boolean sectionIntent;
-  private long streamedBytesThisFrame;
 
   public Bridge(Stats stats) {
     this.stats = stats;
@@ -53,6 +55,12 @@ public final class Bridge implements AutoCloseable {
     pipelines.start();
     post.start();
     textures.start();
+    if (SectionRegionBatcher.ARENA_PAGES && vertexArena == null) {
+      vertexArena = new VertexArena(pipelines.layout(), Packing.VERTEX_STRIDE);
+      indexArena = VertexArena.indices32();
+      regions.arena(vertexArena);
+      if (MESH_ARENA) meshes.arenas(vertexArena, indexArena);
+    }
   }
 
   public Target target(RenderTarget renderTarget) {
@@ -104,12 +112,22 @@ public final class Bridge implements AutoCloseable {
   }
 
   public void capture(Slot slot, MeshData mesh, VertexBuffer.Usage usage) {
+    long started = Profile.ENABLED ? Profile.start() : 0L;
     regions.invalidate(slot);
     meshes.capture(slot, mesh, usage, DrawContextFactory.shaderName());
+    if (Profile.ENABLED) {
+      Profile.add(Profile.Section.CAPTURE, started);
+      Profile.count(Profile.Count.CAPTURED_SECTIONS, 1);
+      if (slot.batch() != null) {
+        Profile.count(Profile.Count.CAPTURED_VERTICES, slot.batch().vertexCount());
+      }
+    }
   }
 
   public void updateIndices(Slot slot, ByteBuffer source) {
+    long started = Profile.ENABLED ? Profile.start() : 0L;
     meshes.updateIndices(slot, source);
+    if (Profile.ENABLED) Profile.add(Profile.Section.INDEX_UPDATE, started);
   }
 
   public void semanticIntent(String intent) {
@@ -222,8 +240,10 @@ public final class Bridge implements AutoCloseable {
       int skipRows,
       int width,
       int height) {
+    long started = Profile.ENABLED ? Profile.start() : 0L;
     boolean accepted =
         textures.upload(image, level, offsetX, offsetY, skipPixels, skipRows, width, height);
+    if (Profile.ENABLED) Profile.add(Profile.Section.TEXTURE_MIRROR, started);
     stats.textureUpload(accepted);
     if (!accepted) {
       throw unsupported(
@@ -272,6 +292,7 @@ public final class Bridge implements AutoCloseable {
       context = context(batch, modelView, projection, framebufferWidth, framebufferHeight);
     } catch (StagingBackpressureException pressure) {
       if (sectionIntent) stats.deferredSectionDraw();
+      if (Profile.ENABLED) Profile.count(Profile.Count.SKIP_DRAW_BACKPRESSURE, 1);
       return true;
     } catch (TextureNotReadyException notReady) {
       stats.textureNotReadyDraw();
@@ -292,6 +313,7 @@ public final class Bridge implements AutoCloseable {
         success = submitTransient(batch, context);
         if (!success && sectionIntent) {
           stats.deferredSectionDraw();
+          if (Profile.ENABLED) Profile.count(Profile.Count.SKIP_DRAW_TRANSIENT, 1);
           return true;
         }
         stats.submitted(batch, success, true, context.textured(), context.lightmapped());
@@ -339,6 +361,35 @@ public final class Bridge implements AutoCloseable {
       float offsetX,
       float offsetY,
       float offsetZ) {
+    long started = Profile.ENABLED ? Profile.start() : 0L;
+    try {
+      return drawSectionTimed(
+          slot,
+          clipTransform,
+          framebufferWidth,
+          framebufferHeight,
+          originX,
+          originY,
+          originZ,
+          offsetX,
+          offsetY,
+          offsetZ);
+    } finally {
+      if (Profile.ENABLED) Profile.add(Profile.Section.SECTION_DRAW, started);
+    }
+  }
+
+  private boolean drawSectionTimed(
+      Slot slot,
+      Matrix4f clipTransform,
+      int framebufferWidth,
+      int framebufferHeight,
+      int originX,
+      int originY,
+      int originZ,
+      float offsetX,
+      float offsetY,
+      float offsetZ) {
     requireStarted();
     if (slot == null || slot.batch() == null) {
       throw unsupported("Section VertexBuffer draw has no captured D3D12 mesh");
@@ -351,10 +402,12 @@ public final class Bridge implements AutoCloseable {
               batch, clipTransform, framebufferWidth, framebufferHeight, offsetX, offsetY, offsetZ);
     } catch (StagingBackpressureException pressure) {
       stats.deferredSectionDraw();
+      if (Profile.ENABLED) Profile.count(Profile.Count.SKIP_SECTION_BACKPRESSURE, 1);
       return true;
     } catch (TextureNotReadyException notReady) {
       stats.textureNotReadyDraw();
       stats.deferredSectionDraw();
+      if (Profile.ENABLED) Profile.count(Profile.Count.SKIP_SECTION_TEXTURE, 1);
       return true;
     }
     if (context.state().scissorEmpty()) {
@@ -385,6 +438,7 @@ public final class Bridge implements AutoCloseable {
       boolean success = submitTransient(batch, context);
       if (!success) {
         stats.deferredSectionDraw();
+        if (Profile.ENABLED) Profile.count(Profile.Count.SKIP_SECTION_TRANSIENT, 1);
         return true;
       }
       stats.submitted(batch, true, true, context.textured(), context.lightmapped());
@@ -407,13 +461,29 @@ public final class Bridge implements AutoCloseable {
   }
 
   public void endSectionLayer() {
+    long started = Profile.ENABLED ? Profile.start() : 0L;
     if (regions.active()) flushSectionRegions();
+    if (Profile.ENABLED) Profile.add(Profile.Section.REGION_DRAW, started);
     regions.end();
     activeSectionContext = null;
     pipelines.endSectionLayer();
   }
 
   public boolean drawImmediate(
+      MeshData mesh,
+      Matrix4f modelView,
+      Matrix4f projection,
+      int framebufferWidth,
+      int framebufferHeight) {
+    long started = Profile.ENABLED ? Profile.start() : 0L;
+    try {
+      return drawImmediateTimed(mesh, modelView, projection, framebufferWidth, framebufferHeight);
+    } finally {
+      if (Profile.ENABLED) Profile.add(Profile.Section.IMMEDIATE_DRAW, started);
+    }
+  }
+
+  private boolean drawImmediateTimed(
       MeshData mesh,
       Matrix4f modelView,
       Matrix4f projection,
@@ -460,12 +530,18 @@ public final class Bridge implements AutoCloseable {
     return true;
   }
 
+  public void beforeFrameSubmit() {
+    if (vertexArena != null) vertexArena.flush();
+    if (indexArena != null) indexArena.flush();
+  }
+
   public void onFrameBoundary() {
-    streamedBytesThisFrame = 0L;
     regions.onFrameBoundary();
     meshes.onFrameBoundary();
     textures.onFrameBoundary();
     targets.onFrameBoundary();
+    if (vertexArena != null) vertexArena.onFrameBoundary();
+    if (indexArena != null) indexArena.onFrameBoundary();
     stats.nativeStaging(
         net.dx12mc.graphics.bgfx.StagingMemory.outstandingBytes(),
         net.dx12mc.graphics.bgfx.StagingMemory.peakBytes());
@@ -489,6 +565,16 @@ public final class Bridge implements AutoCloseable {
         else failure.addSuppressed(exception);
       }
     }
+    for (VertexArena arena : new VertexArena[] {vertexArena, indexArena}) {
+      if (arena == null) continue;
+      try {
+        arena.close();
+      } catch (RuntimeException exception) {
+        if (failure == null) failure = new IllegalStateException("Bridge close failed", exception);
+        else failure.addSuppressed(exception);
+      }
+    }
+    vertexArena = indexArena = null;
     if (failure != null) throw failure;
   }
 
@@ -536,7 +622,9 @@ public final class Bridge implements AutoCloseable {
     if (activeSectionContext == null) {
       throw unsupported("Section-region flush has no prepared draw context");
     }
+    long rebuildStarted = Profile.ENABLED ? Profile.start() : 0L;
     regions.prepare(pipelines.layout(), meshes);
+    if (Profile.ENABLED) Profile.add(Profile.Section.REGION_REBUILD, rebuildStarted);
     DrawContext context = activeSectionContext;
     for (int regionIndex = 0; regionIndex < regions.touchedCount(); regionIndex++) {
       SectionRegionBatcher.Region region = regions.touched(regionIndex);
@@ -562,8 +650,13 @@ public final class Bridge implements AutoCloseable {
         if (!success) throw unsupported("bgfx/D3D12 rejected a compiled section-region page");
       }
       int pending = region.unbuiltVisible();
+      long streamStarted = Profile.ENABLED ? Profile.start() : 0L;
       for (int index = 0; index < pending; index++) {
         streamRegionMember(region.unbuilt(index), context);
+      }
+      if (Profile.ENABLED && pending > 0) {
+        Profile.add(Profile.Section.REGION_STREAM, streamStarted);
+        Profile.count(Profile.Count.WAITING_REGIONS, 1);
       }
     }
   }
@@ -571,11 +664,15 @@ public final class Bridge implements AutoCloseable {
   private void streamRegionMember(SectionRegionBatcher.Member member, DrawContext context) {
     Batch batch = member.batch();
     long bytes = Mesh.estimatedBytes(batch);
-    if (streamedBytesThisFrame + bytes > STREAM_BYTES_PER_FRAME) {
+    if (!regions.takeStreamBudget(bytes)) {
       stats.deferredSectionDraw();
+      if (Profile.ENABLED) Profile.count(Profile.Count.SKIP_STREAM_BUDGET, 1);
       return;
     }
-    streamedBytesThisFrame += bytes;
+    if (Profile.ENABLED) {
+      Profile.count(Profile.Count.STREAMED_SECTIONS, 1);
+      Profile.count(Profile.Count.STREAMED_BYTES, bytes);
+    }
     contexts.sectionMatrix(regions.transform(member));
     boolean success = submitTransient(batch, context);
     stats.nativeStreamingSpill();
