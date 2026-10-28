@@ -102,6 +102,14 @@ public final class PipelineSet implements AutoCloseable {
     return submitted;
   }
 
+  public void mrt(boolean enabled) {
+    for (ShaderPipeline pipeline : pipelines) if (pipeline != null) pipeline.mrt(enabled);
+  }
+
+  public void releaseMrt() {
+    for (ShaderPipeline pipeline : pipelines) if (pipeline != null) pipeline.releaseMrt();
+  }
+
   public void endSectionLayer() {
     if (preparedSectionPipeline < 0) return;
     bgfx_discard(BGFX_DISCARD_ALL);
