@@ -4,6 +4,15 @@ Note: 0.9.0 is the version that fixes the low FPS problem. On a GT1030 it perfor
 
 Note: 0.8.8 is the first version intended to initialize git history. Earlier versions were experimental archives used while the renderer changed rapidly, so they were not added to git history.
 
+## 0.12.2 - Terrain loading
+
+- Put region pages and per-section terrain meshes into a few large shared GPU buffers and send everything built in one frame to bgfx as one update per buffer. In `renderBench uploads` on a GT 1030 every separate buffer update costs about 0.4 ms of bgfx render thread time regardless of its size, so rebuilding several pages, creating translucent section meshes and re-sorting translucent indices each cost a separate update before. Sixteen 160 KiB pages per frame took 8.2 ms that way and take 1.7 ms now.
+- Re-sorted translucent indices go to a new range of the shared index buffer instead of updating each section's own buffer, and freed ranges are reused only after the next frame.
+- Rebuild up to 32 regions or 4 MiB of pages per frame instead of 6 regions, and allow 16 section mesh creations and 32 index updates per frame instead of 4 each. Before, sections waiting for their region to be rebuilt were streamed every frame within a 6 MiB budget, and the sections over the budget were not drawn in that frame, which showed as missing or late terrain while chunks loaded. This is what the `skipped draws sections` counter of the performance log counted.
+- With `-Ddx12mc.profile.cpu=true` the performance log also reports the game thread time per part of the frame, the bgfx render thread time, and per-frame counts of rebuilds, streamed sections, uploads and skipped draws by reason. It costs nothing when off.
+- Add a development flight harness (`runHarness`) that flies a fixed route in a fresh world in a temporary run directory and logs frame times per phase. It is not part of the mod jar.
+- In that harness on a GT 1030 at render distance 12, alternating runs of this version and 0.12.1 gave 138 and 92 fps while flying over new terrain, 217 and 191 fps over generated terrain, 191 and 160 fps on a second pass, and 286 fps for both when standing still. Undrawn sections while flying fell from about 1,400 to 9,000 per 5 seconds to 0 to 1,500. Vanilla OpenGL rendering in the same harness reached 231, 281, 247 and 332 fps. These are benchmark results, not in-game measurements, and the frame benchmark capture has no differing pixels.
+
 ## 0.12.1 - API and shader packs
 
 - Add an experimental API for other mods (API version 0.1) in the `dx12mc-api` jar, which is also bundled in the mod. Mods register through a `dx12mc` Fabric entrypoint and can read whether the renderer is active, its version and the adapter, supply uniform values, and get notified when shader packs load. The API must be used on the render thread. See `docs/API.md`.
