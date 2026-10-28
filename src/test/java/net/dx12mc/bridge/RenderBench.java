@@ -76,7 +76,16 @@ public final class RenderBench {
       exhaustTransient(backend, pipelines, context);
       int failures = PixelCheck.run(backend, pipelines);
       failures += PackPixelCheck.run(backend, pipelines);
+      failures += ArenaPixelCheck.run(backend, pipelines);
       System.out.println("pixel checks failed: " + failures);
+      pipelines.close();
+      atlas.close();
+      light.close();
+      backend.close();
+      return;
+    }
+    if (filter.equals("uploads")) {
+      UploadBench.run(backend, pipelines);
       pipelines.close();
       atlas.close();
       light.close();
