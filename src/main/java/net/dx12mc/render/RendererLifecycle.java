@@ -100,6 +100,18 @@ final class RendererLifecycle implements AutoCloseable {
     return frameOpen && frameMain != null;
   }
 
+  Backend backend() {
+    return backend;
+  }
+
+  Target frameMain() {
+    return frameOpen ? frameMain : null;
+  }
+
+  net.dx12mc.graphics.Adapter adapter() {
+    return state == State.ACTIVE ? backend.adapter() : null;
+  }
+
   void bindTarget(Target target) {
     backend.bindTarget(target);
   }
