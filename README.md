@@ -10,7 +10,7 @@ The project is experimental and Windows-focused. It is a hobby project made to l
 Download: [Modrinth](https://modrinth.com/mod/dx12mc) · [CurseForge](https://www.curseforge.com/minecraft/mc-mods/dx12mc)
 
 <p align="center">
-  <img src="assets/dxmc-debug-overlay.png" alt="DXMC Debug Overlay" style="height: 200px; width: auto;">
+  <img src="assets/dxmc-debug-overlay.png" alt="DXMC Debug Overlay" style="height: 300px; width: auto;">
 </p>
 
 The overlay is a developer tool, enabled with `-Ddx12mc.overlay=true`.
