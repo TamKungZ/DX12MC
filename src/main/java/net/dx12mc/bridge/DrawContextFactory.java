@@ -13,12 +13,16 @@ import net.dx12mc.bridge.state.RenderState;
 import net.dx12mc.bridge.texture.Registry;
 import net.dx12mc.graphics.bgfx.Texture;
 import net.dx12mc.mixin.RenderSystemAccessor;
+import net.dx12mc.pack.PackProgram;
+import net.dx12mc.pack.PackSet;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 final class DrawContextFactory {
   private static final float LINE_VIEW_SHRINK = 1.0f - 1.0f / 256.0f;
   private final Registry textures;
+  private final PackSet packs;
+  private PackProgram override;
   private final RenderState renderState = new RenderState();
   private final Matrix4f mvpScratch = new Matrix4f();
   private final Matrix4f clipScratch = new Matrix4f();
@@ -30,8 +34,9 @@ final class DrawContextFactory {
   private boolean sectionContextPrepared;
   private float sectionDepthBias;
 
-  DrawContextFactory(Registry textures) {
+  DrawContextFactory(Registry textures, PackSet packs) {
     this.textures = textures;
+    this.packs = packs;
   }
 
   DrawContext create(
@@ -158,6 +163,7 @@ final class DrawContextFactory {
     if (kind == DrawContext.Kind.END_PORTAL) {
       ShaderInputs.portal(semantics, RenderSystem.getShaderGameTime(), context.portalParams);
     }
+    context.override = override;
     return context.set(kind, sampled, lightmap, overlay, semantics.discards(), state);
   }
 
@@ -228,6 +234,7 @@ final class DrawContextFactory {
     if (Objects.equals(classifiedShaderName, shader)) return;
     classifiedShaderName = shader;
     semantics = ShaderSemantics.of(shader);
+    override = packs.override(shader);
   }
 
   private Texture resolveBaseTexture(Batch batch, String shader) {
