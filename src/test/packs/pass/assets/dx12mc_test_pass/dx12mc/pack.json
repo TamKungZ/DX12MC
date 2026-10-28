@@ -1,0 +1,44 @@
+{
+  "format": 1,
+  "contract": 1,
+  "programs": {
+    "gain": {
+      "fragment": "shaders/fs_gain.dxsh"
+    },
+    "show": {
+      "fragment": "shaders/fs_show.dxsh"
+    }
+  },
+  "uniforms": {
+    "u_gain": {
+      "type": "vec4",
+      "provider": "test:gain"
+    }
+  },
+  "targets": {
+    "half": {
+      "format": "rgba16f",
+      "scale": 0.5
+    }
+  },
+  "passes": [
+    {
+      "stage": "before_gui",
+      "program": "gain",
+      "inputs": {
+        "s_input": "scene:color"
+      },
+      "output": "target:half",
+      "filter": "linear"
+    },
+    {
+      "stage": "before_gui",
+      "program": "show",
+      "inputs": {
+        "s_input": "target:half"
+      },
+      "output": "scene:color",
+      "filter": "linear"
+    }
+  ]
+}
