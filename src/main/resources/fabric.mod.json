@@ -19,6 +19,9 @@
   "mixins": [
     "dx12mc.mixins.json"
   ],
+  "custom": {
+    "dx12mc:api": "${apiVersion}"
+  },
   "depends": {
     "fabricloader": ">=0.16.14",
     "minecraft": "~1.21.1",
