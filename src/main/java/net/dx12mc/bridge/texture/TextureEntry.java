@@ -39,10 +39,13 @@ final class TextureEntry implements AutoCloseable {
       if (usableGpu()) return applySampler(gpu);
       throw deferredPressure;
     }
+    long started = net.dx12mc.bridge.Profile.ENABLED ? net.dx12mc.bridge.Profile.start() : 0L;
     try {
       createGpuIfNeeded();
       uploadInitialPixels();
       uploadDirtyPixels();
+      if (net.dx12mc.bridge.Profile.ENABLED)
+        net.dx12mc.bridge.Profile.add(net.dx12mc.bridge.Profile.Section.TEXTURE_UPLOAD, started);
       pressureBoundary = -1;
       deferredPressure = null;
       stats.nativeStaging(StagingMemory.outstandingBytes(), StagingMemory.peakBytes());
