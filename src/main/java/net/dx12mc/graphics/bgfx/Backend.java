@@ -198,7 +198,18 @@ public final class Backend implements AutoCloseable {
 
   public long endFrame() {
     ensureInitialized();
+    long started = net.dx12mc.bridge.Profile.ENABLED ? System.nanoTime() : 0L;
     bgfx_frame(false);
+    if (net.dx12mc.bridge.Profile.ENABLED) {
+      net.dx12mc.bridge.Profile.add(net.dx12mc.bridge.Profile.Section.BGFX_FRAME, started);
+      long stats = nbgfx_get_stats();
+      if (stats != 0L) {
+        net.dx12mc.bridge.Profile.renderThread(
+            nanoseconds(
+                BGFXStats.ncpuTimeEnd(stats) - BGFXStats.ncpuTimeBegin(stats),
+                BGFXStats.ncpuTimerFreq(stats)));
+      }
+    }
     swapChain.presented();
     return ++frameNumber;
   }
