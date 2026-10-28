@@ -14,6 +14,7 @@ import net.dx12mc.bridge.Stats;
 import net.dx12mc.bridge.UnsupportedRenderPathException;
 import net.dx12mc.graphics.bgfx.Mesh;
 import net.dx12mc.graphics.bgfx.StagingBackpressureException;
+import net.dx12mc.graphics.bgfx.VertexArena;
 import org.lwjgl.bgfx.BGFXVertexLayout;
 
 public final class MeshStore implements AutoCloseable {
@@ -23,9 +24,9 @@ public final class MeshStore implements AutoCloseable {
       Math.max(64L << 20, Long.getLong("dx12mc.mesh.cache.bytes", 256L << 20));
 
   private static final int MAX_CREATES_PER_FRAME =
-      Math.max(1, Integer.getInteger("dx12mc.mesh.createsPerFrame", 4));
+      Math.max(1, Integer.getInteger("dx12mc.mesh.createsPerFrame", 16));
   private static final int MAX_INDEX_UPDATES_PER_FRAME =
-      Math.max(1, Integer.getInteger("dx12mc.mesh.indexUpdatesPerFrame", 4));
+      Math.max(1, Integer.getInteger("dx12mc.mesh.indexUpdatesPerFrame", 32));
 
   private final Stats stats;
   private final Set<Slot> slots = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -36,6 +37,8 @@ public final class MeshStore implements AutoCloseable {
   private boolean allocationBackoff;
   private final FrameBudget creates = new FrameBudget(MAX_CREATES_PER_FRAME);
   private final FrameBudget indexUpdates = new FrameBudget(MAX_INDEX_UPDATES_PER_FRAME);
+  private VertexArena vertexArena;
+  private VertexArena indexArena;
 
   public MeshStore(Stats stats) {
     this.stats = stats;
@@ -102,6 +105,11 @@ public final class MeshStore implements AutoCloseable {
     stats.indexUpdate(true);
   }
 
+  public void arenas(VertexArena vertices, VertexArena indices) {
+    this.vertexArena = vertices;
+    this.indexArena = indices;
+  }
+
   public Mesh resident(Slot slot, BGFXVertexLayout layout) {
     Mesh gpu = syncIndices(slot, slot.mesh());
     if (gpu != null && gpu.valid()) {
@@ -114,7 +122,11 @@ public final class MeshStore implements AutoCloseable {
       return null;
     }
     try {
-      gpu = Mesh.create(slot.batch(), layout);
+      gpu =
+          vertexArena == null
+              ? null
+              : Mesh.createSortableArena(slot.batch(), vertexArena, indexArena);
+      if (gpu == null) gpu = Mesh.create(slot.batch(), layout);
       creates.tryTake();
       slot.mesh(gpu);
       touch(slot);
