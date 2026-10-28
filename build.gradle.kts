@@ -10,6 +10,8 @@ plugins {
 
 fun prop(name: String): String = property(name) as String
 
+evaluationDependsOn(":api")
+
 version = "${prop("mod_version")}+mc${prop("minecraft_version")}"
 group = prop("maven_group")
 base {
@@ -45,6 +47,7 @@ val signingKeyName: String? =
     } else {
         null
     }
+extra["dx12mcSigningKey"] = signingKeyName
 val bgfxWindowsNatives by configurations.creating
 val javaFormatter by configurations.creating
 val shadercCache = File(
@@ -60,7 +63,7 @@ val formatterMaxHeap = prop("formatter_max_heap")
 val shaderSourceDir = layout.projectDirectory.dir("src/main/shaders")
 val generatedShaderRoot = layout.buildDirectory.dir("generated/dx12mc-shaders")
 val generatedShaderDir = generatedShaderRoot.map { it.dir("assets/dx12mc/shaders/d3d12") }
-data class ShaderSpec(val name: String, val type: String, val magic: Char)
+data class ShaderSpec(val name: String, val type: String, val magic: Char, val source: String = name, val defines: String? = null)
 val shaderSpecs = listOf(
     ShaderSpec("vs_position_color", "vertex", 'V'),
     ShaderSpec("vs_position_color_light", "vertex", 'V'),
@@ -87,7 +90,10 @@ val shaderSpecs = listOf(
     ShaderSpec("fs_post_color_convolve", "fragment", 'F'),
     ShaderSpec("fs_post_bits", "fragment", 'F'),
     ShaderSpec("fs_post_spider", "fragment", 'F')
-)
+) + listOf(
+    "fs_position_color", "fs_position_color_alpha", "fs_logic_invert", "fs_logic_invert_alpha",
+    "fs_position_color_tex", "fs_position_color_tex_cutout", "fs_entity", "fs_entity_cutout", "fs_end_portal"
+).map { ShaderSpec("${it}_mrt", "fragment", 'F', it, "DX12MC_SCENE_MRT") }
 
 val prepareShaderc by tasks.registering {
     group = "dx12mc verification"
@@ -183,6 +189,8 @@ val prepareShaderc by tasks.registering {
         }
     }
 }
+
+apply(from = "tools/shaderpack.gradle.kts")
 
 val validateD3D12ShaderSources by tasks.registering {
     group = "dx12mc verification"
@@ -317,13 +325,13 @@ val validateD3D12ShaderSources by tasks.registering {
             }
             if (alphaVariant) requireAll(name, listOf("uniform vec4 u_material;", "< u_material.x) discard;"))
         }
-        requireAll("fs_logic_invert.sc", listOf("\$input v_color0, v_fog", "gl_FragColor = vec4_splat(1.0);"))
+        requireAll("fs_logic_invert.sc", listOf("\$input v_color0, v_fog", "dx12mcOutput(vec4_splat(1.0));"))
         if (shaderSourceDir.file("fs_logic_invert.sc").asFile.readText().contains("discard")) {
             throw GradleException("fs_logic_invert.sc: only alpha-test variants may discard")
         }
         requireAll("fs_logic_invert_alpha.sc", listOf(
             "\$input v_color0, v_fog", "uniform vec4 u_material;", "< u_material.x) discard;",
-            "gl_FragColor = vec4_splat(1.0);"))
+            "dx12mcOutput(vec4_splat(1.0));"))
         for (name in listOf("fs_position_color_tex.sc", "fs_position_color_tex_cutout.sc", "fs_entity.sc", "fs_entity_cutout.sc")) {
             requireAll(name, listOf("SAMPLER2D(s_texColor, 0)", "dx12mcTexture2DMaxLod(s_texColor, v_texcoord0, u_texLod.x)"))
         }
@@ -340,8 +348,8 @@ val compileD3D12Shaders by tasks.registering {
     inputs.property("shadercSha256", findProperty("shaderc_sha256_$lwjglVersion") as String?)
     inputs.property("shadercProfile", shadercProfile)
     inputs.property("shadercOptimization", shadercOptimization)
-    for (spec in shaderSpecs) {
-        inputs.file(shaderSourceDir.file("${spec.name}.sc"))
+    for (spec in shaderSpecs.distinctBy { it.source }) {
+        inputs.file(shaderSourceDir.file("${spec.source}.sc"))
     }
     inputs.file(shaderSourceDir.file("varying.def.sc"))
     inputs.file(shaderSourceDir.file("common.sh"))
@@ -356,7 +364,7 @@ val compileD3D12Shaders by tasks.registering {
             ?.forEach { it.delete() }
         val failures = mutableListOf<String>()
         for (spec in shaderSpecs) {
-            val inputFile = shaderSourceDir.file("${spec.name}.sc").asFile
+            val inputFile = shaderSourceDir.file("${spec.source}.sc").asFile
             val outputFile = File(outputDir, "${spec.name}.bin")
             outputFile.delete()
             val command = listOf(
@@ -369,8 +377,8 @@ val compileD3D12Shaders by tasks.registering {
                 "--varyingdef", varyingFile.absolutePath,
                 "-i", shaderSourceDir.asFile.absolutePath,
                 "-O", shadercOptimization
-            )
-            logger.lifecycle("DX12MC shaderc: ${spec.name}.sc")
+            ) + (spec.defines?.let { listOf("--define", it) } ?: emptyList())
+            logger.lifecycle("DX12MC shaderc: ${spec.name}")
             val process = ProcessBuilder(command)
                 .directory(project.projectDir)
                 .redirectErrorStream(true)
@@ -424,6 +432,8 @@ dependencies {
     minecraft("com.mojang:minecraft:$minecraftVersion")
     mappings(loom.officialMojangMappings())
     modImplementation("net.fabricmc:fabric-loader:$loaderVersion")
+    implementation(project(":api"))
+    include(project(":api"))
     implementation("org.lwjgl:lwjgl-bgfx:$lwjglVersion")
     include("org.lwjgl:lwjgl-bgfx:$lwjglVersion")
     runtimeOnly("org.lwjgl:lwjgl-bgfx:$lwjglVersion:natives-windows")
@@ -455,8 +465,9 @@ loom {
 
 tasks.processResources {
     inputs.property("version", project.version)
+    inputs.property("apiVersion", prop("api_version"))
     filesMatching("fabric.mod.json") {
-        expand("version" to project.version)
+        expand("version" to project.version, "apiVersion" to prop("api_version"))
     }
     from({ bgfxWindowsNatives.map { zipTree(it) } }) {
         include("**/*.dll")
@@ -482,7 +493,7 @@ tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
 }
 
-fun javaSourceFiles() = fileTree("src") {
+fun javaSourceFiles() = files(fileTree("src"), fileTree("api/src"), fileTree("examples")).asFileTree.matching {
     include("**/*.java")
 }.files.sortedBy { it.path }
 
@@ -519,6 +530,8 @@ tasks.register<JavaExec>("checkJavaFormat") {
 
 tasks.test {
     useJUnitPlatform()
+    dependsOn("compileTestShaderPacks")
+    systemProperty("dx12mc.testPacks", layout.buildDirectory.dir("test-packs").get().asFile.absolutePath)
 }
 
 tasks.javadoc {
@@ -537,9 +550,10 @@ tasks.register<JavaExec>("cpuBench") {
 tasks.register<JavaExec>("renderBench") {
     group = "verification"
     description = "Measures bgfx D3D12 submission cost on the local GPU with synthetic terrain meshes."
-    dependsOn(verifyD3D12Shaders, "testClasses")
+    dependsOn(verifyD3D12Shaders, "testClasses", "compileTestShaderPacks")
     classpath = files(sourceSets["test"].runtimeClasspath, generatedShaderRoot)
     mainClass.set("net.dx12mc.bridge.RenderBench")
+    systemProperty("dx12mc.testPacks", layout.buildDirectory.dir("test-packs").get().asFile.absolutePath)
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     jvmArgs(providers.gradleProperty("benchJvm").orElse("").get().split(" ").filter { it.isNotEmpty() })
     args(providers.gradleProperty("benchArgs").orElse("").get().split(" ").filter { it.isNotEmpty() })
