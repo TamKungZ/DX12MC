@@ -12,5 +12,5 @@ void main()
     vec4 base = dx12mcTexture2DMaxLod(s_texColor, v_texcoord0, u_texLod.x);
     if (u_material.w > 0.5) base = base.rrrr;
 
-    gl_FragColor = dx12mcApplyFog(base * v_color0 * u_color, v_fog, u_fogParams, u_fogColor);
+    dx12mcOutput(dx12mcApplyFog(base * v_color0 * u_color, v_fog, u_fogParams, u_fogColor));
 }
