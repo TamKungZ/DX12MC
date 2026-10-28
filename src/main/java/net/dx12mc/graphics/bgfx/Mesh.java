@@ -10,7 +10,8 @@ public final class Mesh implements AutoCloseable {
   public enum Kind {
     SORTABLE,
     POOLED,
-    SHARED_QUADS
+    SHARED_QUADS,
+    ARENA
   }
 
   private final Kind kind;
@@ -24,6 +25,11 @@ public final class Mesh implements AutoCloseable {
   private long bytes;
   private int drawFirstIndex;
   private int drawIndexCount = -1;
+  private int startVertex;
+  private VertexArena arena;
+  private VertexArena.Allocation allocation;
+  private VertexArena indexArena;
+  private VertexArena.Allocation indexAllocation;
 
   private Mesh(
       Kind kind,
@@ -50,6 +56,8 @@ public final class Mesh implements AutoCloseable {
   }
 
   public static Mesh create(Batch batch, BGFXVertexLayout layout, Kind kind) {
+    if (net.dx12mc.bridge.Profile.ENABLED)
+      net.dx12mc.bridge.Profile.count(net.dx12mc.bridge.Profile.Count.MESH_UPLOADS, 2);
     boolean index32 = Packing.index32(batch);
     int vertexBytes = Packing.vertexBytes(batch);
     int indexBytes = Math.multiplyExact(batch.indexCount(), index32 ? Integer.BYTES : Short.BYTES);
@@ -76,7 +84,7 @@ public final class Mesh implements AutoCloseable {
                 bgfx_create_dynamic_index_buffer_mem(
                     indexMemory, BGFX_BUFFER_ALLOW_RESIZE | widthFlag);
             case POOLED -> bgfx_create_dynamic_index_buffer_mem(indexMemory, widthFlag);
-            case SHARED_QUADS ->
+            case SHARED_QUADS, ARENA ->
                 throw new IllegalArgumentException("shared quad meshes use createSharedQuads");
           };
       if (!BGFX_HANDLE_IS_VALID(indexHandle)) {
@@ -103,6 +111,8 @@ public final class Mesh implements AutoCloseable {
   }
 
   public static Mesh createSharedQuads(Batch batch, BGFXVertexLayout layout) {
+    if (net.dx12mc.bridge.Profile.ENABLED)
+      net.dx12mc.bridge.Profile.count(net.dx12mc.bridge.Profile.Count.MESH_UPLOADS, 1);
     if (!canShareQuadIndices(batch)) {
       throw new IllegalArgumentException("batch cannot use the shared quad index buffer");
     }
@@ -131,6 +141,67 @@ public final class Mesh implements AutoCloseable {
     }
   }
 
+  public static Mesh createArena(Batch batch, VertexArena arena) {
+    if (!canShareQuadIndices(batch)) {
+      throw new IllegalArgumentException("batch cannot use the shared quad index buffer");
+    }
+    boolean index32 = Packing.index32(batch);
+    VertexArena.Allocation allocation =
+        arena.allocate(batch.vertexCount(), data -> Packing.vertices(data, batch));
+    if (allocation == null) return null;
+    Mesh mesh =
+        new Mesh(
+            Kind.ARENA,
+            allocation.handle(),
+            QuadIndices.handle(index32),
+            batch.vertexCount(),
+            batch.indexCount(),
+            Packing.vertexBytes(batch),
+            0,
+            index32);
+    mesh.startVertex = allocation.startVertex();
+    mesh.arena = arena;
+    mesh.allocation = allocation;
+    return mesh;
+  }
+
+  public static Mesh createSortableArena(Batch batch, VertexArena vertices, VertexArena indices) {
+    VertexArena.Allocation vertexAllocation =
+        vertices.allocate(batch.vertexCount(), data -> Packing.vertices(data, batch));
+    if (vertexAllocation == null) return null;
+    VertexArena.Allocation indexAllocation = allocateIndices(indices, batch);
+    if (indexAllocation == null) {
+      vertices.free(vertexAllocation);
+      return null;
+    }
+    Mesh mesh =
+        new Mesh(
+            Kind.ARENA,
+            vertexAllocation.handle(),
+            indexAllocation.handle(),
+            batch.vertexCount(),
+            batch.indexCount(),
+            Packing.vertexBytes(batch),
+            batch.indexCount() * Integer.BYTES,
+            true);
+    mesh.startVertex = vertexAllocation.startVertex();
+    mesh.arena = vertices;
+    mesh.allocation = vertexAllocation;
+    mesh.indexArena = indices;
+    mesh.indexAllocation = indexAllocation;
+    return mesh;
+  }
+
+  private static VertexArena.Allocation allocateIndices(VertexArena indices, Batch batch) {
+    return indices.allocate(
+        batch.indexCount(),
+        data -> Packing.indices(data, batch.indices(), batch.indexCount(), true));
+  }
+
+  public boolean sortable() {
+    return kind == Kind.SORTABLE || indexArena != null;
+  }
+
   public static long estimatedBytes(Batch batch) {
     boolean index32 = Packing.index32(batch);
     return (long) Packing.vertexBytes(batch)
@@ -139,7 +210,7 @@ public final class Mesh implements AutoCloseable {
 
   public void updateIndices(Batch batch) {
     if (!valid()) throw new IllegalStateException("mesh is closed");
-    if (kind != Kind.SORTABLE) {
+    if (!sortable()) {
       throw new IllegalStateException("index update requires a sortable mesh, kind=" + kind);
     }
     if (batch.vertexCount() != vertexCount) {
@@ -149,6 +220,17 @@ public final class Mesh implements AutoCloseable {
     if (!index32 && Packing.index32(batch)) {
       throw new IllegalStateException("index update requires wider index storage");
     }
+    if (indexArena != null) {
+      VertexArena.Allocation replacement = allocateIndices(indexArena, batch);
+      if (replacement == null) throw new StagingBackpressureException("index arena is full");
+      indexArena.free(indexAllocation);
+      indexAllocation = replacement;
+      indices = replacement.handle();
+      indexCount = batch.indexCount();
+      indexBytes = indexCount * Integer.BYTES;
+      bytes = (long) vertexBytes + indexBytes;
+      return;
+    }
     int newIndexBytes =
         Math.multiplyExact(batch.indexCount(), index32 ? Integer.BYTES : Short.BYTES);
     BGFXMemory indexMemory =
@@ -156,6 +238,8 @@ public final class Mesh implements AutoCloseable {
             newIndexBytes,
             data -> Packing.indices(data, batch.indices(), batch.indexCount(), index32));
     bgfx_update_dynamic_index_buffer(indices, 0, indexMemory);
+    if (net.dx12mc.bridge.Profile.ENABLED)
+      net.dx12mc.bridge.Profile.count(net.dx12mc.bridge.Profile.Count.INDEX_UPLOADS, 1);
     indexCount = batch.indexCount();
     indexBytes = newIndexBytes;
     bytes = (long) vertexBytes + indexBytes;
@@ -169,13 +253,16 @@ public final class Mesh implements AutoCloseable {
     if (!valid()) throw new IllegalStateException("mesh is closed");
     int first = drawIndexCount < 0 ? 0 : drawFirstIndex;
     int count = drawIndexCount < 0 ? indexCount : drawIndexCount;
-    if (kind == Kind.POOLED || kind == Kind.SHARED_QUADS) {
-      bgfx_set_dynamic_vertex_buffer(0, vertices, 0, vertexCount);
+    if (kind == Kind.POOLED || kind == Kind.SHARED_QUADS || kind == Kind.ARENA) {
+      bgfx_set_dynamic_vertex_buffer(0, vertices, startVertex, vertexCount);
     } else {
       bgfx_set_vertex_buffer(0, vertices, 0, vertexCount);
     }
-    if (kind == Kind.SHARED_QUADS) bgfx_set_index_buffer(indices, first, count);
-    else bgfx_set_dynamic_index_buffer(indices, first, count);
+    if (indexArena != null) {
+      bgfx_set_dynamic_index_buffer(indices, indexAllocation.startVertex() + first, count);
+    } else if (kind == Kind.SHARED_QUADS || kind == Kind.ARENA) {
+      bgfx_set_index_buffer(indices, first, count);
+    } else bgfx_set_dynamic_index_buffer(indices, first, count);
   }
 
   public void drawRange(int firstIndex, int count) {
@@ -198,6 +285,15 @@ public final class Mesh implements AutoCloseable {
 
   @Override
   public void close() {
+    if (kind == Kind.ARENA) {
+      if (allocation != null) arena.free(allocation);
+      if (indexAllocation != null) indexArena.free(indexAllocation);
+      allocation = null;
+      indexAllocation = null;
+      vertices = BGFX_INVALID_HANDLE;
+      indices = BGFX_INVALID_HANDLE;
+      return;
+    }
     destroy(kind, vertices, kind == Kind.SHARED_QUADS ? BGFX_INVALID_HANDLE : indices);
     vertices = BGFX_INVALID_HANDLE;
     indices = BGFX_INVALID_HANDLE;
