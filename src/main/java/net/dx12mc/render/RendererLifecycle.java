@@ -145,6 +145,7 @@ final class RendererLifecycle implements AutoCloseable {
         backend.beginPresentView();
         bridge.blitToBackbuffer(frameMain, presentValues);
       }
+      if (bridge != null) bridge.beforeFrameSubmit();
       backend.endFrame();
       frameOpen = false;
       frameMain = null;
