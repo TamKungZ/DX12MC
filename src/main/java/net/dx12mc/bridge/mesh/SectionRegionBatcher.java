@@ -6,11 +6,13 @@ import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import net.dx12mc.bridge.Profile;
 import net.dx12mc.bridge.Slot;
 import net.dx12mc.bridge.Stats;
 import net.dx12mc.graphics.bgfx.Mesh;
 import net.dx12mc.graphics.bgfx.Packing;
 import net.dx12mc.graphics.bgfx.StagingBackpressureException;
+import net.dx12mc.graphics.bgfx.VertexArena;
 import org.joml.Matrix4f;
 import org.lwjgl.bgfx.BGFXVertexLayout;
 
@@ -27,7 +29,9 @@ public final class SectionRegionBatcher implements AutoCloseable {
   private static final long MAX_RESIDENT_BYTES =
       Math.max(64L << 20, Long.getLong("dx12mc.region.cache.bytes", 256L << 20));
   private static final int MAX_REBUILDS_PER_FRAME =
-      Math.max(1, Integer.getInteger("dx12mc.region.rebuildsPerFrame", 6));
+      Math.max(1, Integer.getInteger("dx12mc.region.rebuildsPerFrame", 32));
+  private static final long MAX_REBUILD_BYTES_PER_FRAME =
+      Math.max(1L << 20, Long.getLong("dx12mc.region.rebuildBytesPerFrame", 4L << 20));
   private static final long MAX_PAGE_BYTES =
       Math.max(1L << 20, Long.getLong("dx12mc.region.page.bytes", 8L << 20));
   private static final long STALE_FRAMES =
@@ -50,24 +54,66 @@ public final class SectionRegionBatcher implements AutoCloseable {
   private long frame = 1L;
   private long pass;
   private long residentBytes;
-  private final FrameBudget rebuilds = new FrameBudget(MAX_REBUILDS_PER_FRAME);
+  private static final long STREAM_BYTES_PER_FRAME =
+      Math.max(1L << 20, Long.getLong("dx12mc.stream.bytesPerFrame", 6L << 20));
+  private final FrameBudget rebuilds;
+  private final long rebuildBytesPerFrame;
+  private final long streamBytesPerFrame;
+  private long rebuiltBytesThisFrame;
+  private long streamedBytesThisFrame;
 
   interface PageFactory {
     Page create(Batch combined, boolean quadPattern, BGFXVertexLayout layout);
   }
 
+  public static final boolean ARENA_PAGES =
+      Boolean.parseBoolean(System.getProperty("dx12mc.region.arena", "true"));
   private final PageFactory pageFactory;
+  private VertexArena arena;
 
   public SectionRegionBatcher(Stats stats) {
-    this(stats, SectionRegionBatcher::nativePage);
+    this(stats, null);
   }
 
   SectionRegionBatcher(Stats stats, PageFactory pageFactory) {
-    this.stats = stats;
-    this.pageFactory = pageFactory;
+    this(
+        stats,
+        pageFactory,
+        MAX_REBUILDS_PER_FRAME,
+        MAX_REBUILD_BYTES_PER_FRAME,
+        STREAM_BYTES_PER_FRAME);
   }
 
-  private static Page nativePage(Batch combined, boolean quadPattern, BGFXVertexLayout layout) {
+  SectionRegionBatcher(
+      Stats stats,
+      PageFactory pageFactory,
+      int rebuildsPerFrame,
+      long rebuildBytesPerFrame,
+      long streamBytesPerFrame) {
+    this.stats = stats;
+    this.pageFactory = pageFactory != null ? pageFactory : this::nativePage;
+    this.rebuilds = new FrameBudget(rebuildsPerFrame);
+    this.rebuildBytesPerFrame = rebuildBytesPerFrame;
+    this.streamBytesPerFrame = streamBytesPerFrame;
+  }
+
+  public boolean takeStreamBudget(long bytes) {
+    if (streamedBytesThisFrame + bytes > streamBytesPerFrame) return false;
+    streamedBytesThisFrame += bytes;
+    return true;
+  }
+
+  public void arena(VertexArena arena) {
+    this.arena = arena;
+  }
+
+  private Page nativePage(Batch combined, boolean quadPattern, BGFXVertexLayout layout) {
+    if (ARENA_PAGES && arena != null && quadPattern && Mesh.canShareQuadIndices(combined)) {
+      Mesh pooled = Mesh.createArena(combined, arena);
+      if (pooled != null) {
+        return new Page(pooled, combined.vertexCount(), combined.indexCount(), pooled.bytes());
+      }
+    }
     Mesh mesh =
         quadPattern && Mesh.canShareQuadIndices(combined)
             ? Mesh.createSharedQuads(combined, layout)
@@ -147,15 +193,25 @@ public final class SectionRegionBatcher implements AutoCloseable {
     for (Region region : touched) {
       purgeInvalidMembers(region);
       if (!region.dirty) continue;
-      if (!rebuilds.tryTake()) {
+      if (rebuiltBytesThisFrame >= rebuildBytesPerFrame || !rebuilds.tryTake()) {
         stats.regionRebuildDeferred();
+        if (Profile.ENABLED) Profile.count(Profile.Count.DEFER_BUDGET, 1);
         continue;
       }
       if (rebuild(region, layout)) {
+        rebuiltBytesThisFrame += region.bytes;
         for (Member member : region.members) meshes.discardGpuCopy(member.slot);
         stats.regionRebuilt();
+        if (Profile.ENABLED) {
+          Profile.count(Profile.Count.REBUILT_SECTIONS, region.members.size());
+          Profile.count(Profile.Count.REBUILT_BYTES, region.bytes);
+          if (frame - region.lastRebuildFrame < 60L)
+            Profile.count(Profile.Count.REPEAT_REBUILDS, 1);
+          region.lastRebuildFrame = frame;
+        }
       } else {
         stats.regionRebuildDeferred();
+        if (Profile.ENABLED) Profile.count(Profile.Count.DEFER_FAILED, 1);
       }
     }
     enforceResidentBudget();
@@ -193,6 +249,8 @@ public final class SectionRegionBatcher implements AutoCloseable {
   public void onFrameBoundary() {
     frame++;
     rebuilds.reset();
+    rebuiltBytesThisFrame = 0L;
+    streamedBytesThisFrame = 0L;
     for (int i = regions.size() - 1; i >= 0; i--) {
       Region region = regions.get(i);
       if (frame - region.lastUsedFrame > STALE_FRAMES) evict(region);
@@ -421,6 +479,7 @@ public final class SectionRegionBatcher implements AutoCloseable {
     private boolean dirty = true;
     private long visiblePass = Long.MIN_VALUE;
     private long lastUsedFrame;
+    private long lastRebuildFrame = Long.MIN_VALUE / 2;
     private long bytes;
 
     private Region(Layer layer, RegionKey key) {
