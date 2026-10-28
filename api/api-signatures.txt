@@ -1,0 +1,59 @@
+api 0.1
+public final class net.dx12mc.api.AdapterInfo extends java.lang.Record
+  public final boolean net.dx12mc.api.AdapterInfo.equals(java.lang.Object)
+  public final int net.dx12mc.api.AdapterInfo.hashCode()
+  public final java.lang.String net.dx12mc.api.AdapterInfo.toString()
+  public int net.dx12mc.api.AdapterInfo.deviceId()
+  public int net.dx12mc.api.AdapterInfo.vendorId()
+  public java.lang.String net.dx12mc.api.AdapterInfo.driverVersion()
+  public java.lang.String net.dx12mc.api.AdapterInfo.featureLevel()
+  public java.lang.String net.dx12mc.api.AdapterInfo.name()
+  public net.dx12mc.api.AdapterInfo(java.lang.String,int,int,java.lang.String,java.lang.String)
+public final class net.dx12mc.api.ApiVersion extends java.lang.Record implements java.lang.Comparable<net.dx12mc.api.ApiVersion>
+  public boolean net.dx12mc.api.ApiVersion.satisfies(net.dx12mc.api.ApiVersion)
+  public final boolean net.dx12mc.api.ApiVersion.equals(java.lang.Object)
+  public final int net.dx12mc.api.ApiVersion.hashCode()
+  public int net.dx12mc.api.ApiVersion.compareTo(net.dx12mc.api.ApiVersion)
+  public int net.dx12mc.api.ApiVersion.major()
+  public int net.dx12mc.api.ApiVersion.minor()
+  public java.lang.String net.dx12mc.api.ApiVersion.toString()
+  public net.dx12mc.api.ApiVersion(int,int)
+  public static net.dx12mc.api.ApiVersion net.dx12mc.api.ApiVersion.parse(java.lang.String)
+public final class net.dx12mc.api.Capability extends java.lang.Enum<net.dx12mc.api.Capability>
+  public static final net.dx12mc.api.Capability net.dx12mc.api.Capability.MATERIAL_TEXTURES
+  public static final net.dx12mc.api.Capability net.dx12mc.api.Capability.SCENE_TARGETS
+  public static final net.dx12mc.api.Capability net.dx12mc.api.Capability.SHADER_PACKS
+  public static net.dx12mc.api.Capability net.dx12mc.api.Capability.valueOf(java.lang.String)
+  public static net.dx12mc.api.Capability[] net.dx12mc.api.Capability.values()
+public abstract interface net.dx12mc.api.Dx12mc
+  public abstract boolean net.dx12mc.api.Dx12mc.active()
+  public abstract boolean net.dx12mc.api.Dx12mc.supports(net.dx12mc.api.Capability)
+  public abstract java.lang.String net.dx12mc.api.Dx12mc.modVersion()
+  public abstract java.util.List<net.dx12mc.api.PackStatus> net.dx12mc.api.Dx12mc.packs()
+  public abstract java.util.Optional<net.dx12mc.api.AdapterInfo> net.dx12mc.api.Dx12mc.adapter()
+  public abstract net.dx12mc.api.ApiVersion net.dx12mc.api.Dx12mc.apiVersion()
+  public abstract void net.dx12mc.api.Dx12mc.addReloadListener(net.dx12mc.api.ReloadListener)
+  public abstract void net.dx12mc.api.Dx12mc.registerUniformProvider(java.lang.String,net.dx12mc.api.UniformProvider)
+public abstract interface net.dx12mc.api.Dx12mcEntrypoint
+  public abstract void net.dx12mc.api.Dx12mcEntrypoint.onDx12mc(net.dx12mc.api.Dx12mc)
+public final class net.dx12mc.api.PackStatus extends java.lang.Record
+  public final boolean net.dx12mc.api.PackStatus.equals(java.lang.Object)
+  public final int net.dx12mc.api.PackStatus.hashCode()
+  public final java.lang.String net.dx12mc.api.PackStatus.toString()
+  public java.lang.String net.dx12mc.api.PackStatus.id()
+  public java.lang.String net.dx12mc.api.PackStatus.message()
+  public java.lang.String net.dx12mc.api.PackStatus.source()
+  public net.dx12mc.api.PackStatus$State net.dx12mc.api.PackStatus.state()
+  public net.dx12mc.api.PackStatus(java.lang.String,java.lang.String,net.dx12mc.api.PackStatus$State,java.lang.String)
+public static final class net.dx12mc.api.PackStatus$State extends java.lang.Enum<net.dx12mc.api.PackStatus$State>
+  public static final net.dx12mc.api.PackStatus$State net.dx12mc.api.PackStatus$State.ACTIVE
+  public static final net.dx12mc.api.PackStatus$State net.dx12mc.api.PackStatus$State.DENIED
+  public static final net.dx12mc.api.PackStatus$State net.dx12mc.api.PackStatus$State.FAILED
+  public static net.dx12mc.api.PackStatus$State net.dx12mc.api.PackStatus$State.valueOf(java.lang.String)
+  public static net.dx12mc.api.PackStatus$State[] net.dx12mc.api.PackStatus$State.values()
+public abstract interface net.dx12mc.api.ReloadListener
+  public abstract void net.dx12mc.api.ReloadListener.onReload(java.util.List<net.dx12mc.api.PackStatus>)
+public abstract interface net.dx12mc.api.UniformProvider
+  public abstract void net.dx12mc.api.UniformProvider.update(java.nio.FloatBuffer)
+public final class net.dx12mc.api.WrongThreadException extends java.lang.IllegalStateException
+  public net.dx12mc.api.WrongThreadException(java.lang.String)
